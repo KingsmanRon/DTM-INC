@@ -1,0 +1,40 @@
+# deps
+node_modules
+.pnp
+.pnp.js
+
+# next
+.next
+out
+next-env.d.ts
+
+# production
+build
+dist
+
+# misc
+.DS_Store
+*.pem
+.vscode
+.idea
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# envs — NEVER commit (secrets live in Vercel/Railway/Supabase Vault)
+.env
+.env.local
+.env.*.local
+
+# typescript
+*.tsbuildinfo
+
+# test coverage
+coverage
+
+# supabase local
+supabase/.branches
+supabase/.temp
