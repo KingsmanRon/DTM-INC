@@ -22,7 +22,7 @@ export async function resolveMfa(role: AppRole): Promise<MfaDecision> {
 
   const supabase = await getSupabaseServer();
 
-  const { data: aal } = await supabase.auth.getAuthenticatorAssuranceLevel();
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const totp = factors?.totp?.find((f) => f.status === "verified");
 
