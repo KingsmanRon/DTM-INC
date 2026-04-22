@@ -16,13 +16,13 @@ import type { AppRole } from "@/lib/auth/session";
 
 export type AuditAction =
   | "login_success" | "login_failure" | "login_lockout" | "logout"
-  | "patient_create" | "patient_update" | "patient_archive"
+  | "patient_create" | "patient_update" | "patient_archive" | "patient_unarchive"
   | "document_upload" | "document_view" | "document_download" | "document_archive"
   | "note_create" | "note_read" | "note_amend" | "note_finalise"
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"
   | "practice_settings_update" | "onboarding_pdf_generate"
   | "break_glass_request" | "break_glass_access"
-  | "consent_capture";
+  | "consent_capture" | "access_denied";
 
 export type AuditInput = {
   actorUserId: string | null;

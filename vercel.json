@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
+  "crons": [
+    {
+      "path": "/api/v1/internal/verify-audit-chain",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

@@ -10,6 +10,8 @@ const PUBLIC_PATHS = new Set<string>([
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
+  // /mfa/* requires AAL1 but not AAL2 — handled inside the page, not here.
+  if (pathname.startsWith("/mfa/")) return false;
   return pathname.startsWith("/_next") || pathname.startsWith("/brand") ||
          pathname.startsWith("/icons") || pathname === "/favicon.ico" ||
          pathname === "/manifest.webmanifest" || pathname === "/sw.js";

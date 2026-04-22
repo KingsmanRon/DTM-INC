@@ -19,12 +19,15 @@ export async function GET(req: NextRequest) {
     const includeArchived = url.searchParams.get("archived") === "true";
 
     const supabase = await getSupabaseServer();
-    let q = supabase
-      .from("patients")
+    // Default to the active_patients view (migration 0004). Archived access
+    // is a separate, deliberate code path for SAR lookups and goes through
+    // the full patients table with an explicit archived filter.
+    const source = includeArchived ? "patients" : "active_patients";
+    const q = supabase
+      .from(source)
       .select("id, file_number, title, first_names, surname, phone, payer_type, status, updated_at", { count: "exact" })
       .order("updated_at", { ascending: false })
       .range(offset, offset + limit - 1);
-    if (!includeArchived) q = q.eq("status", "active");
 
     const { data, error, count } = await q;
     if (error) return jsonError(500, "db_error", error.message);

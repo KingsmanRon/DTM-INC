@@ -30,11 +30,13 @@ export async function GET(req: NextRequest) {
     ];
     if (digits.length >= 4) conditions.push(`phone.ilike.%${digits}`);
 
+    // `active_patients` is a security_invoker view defined in migration 0004
+    // — filters `archived_at IS NULL` in one place so we don't scatter that
+    // predicate across the codebase (per review §active_patients).
     const { data, error } = await supabase
-      .from("patients")
+      .from("active_patients")
       .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at")
       .or(conditions.join(","))
-      .eq("status", "active")
       .order("updated_at", { ascending: false })
       .limit(10);
 
