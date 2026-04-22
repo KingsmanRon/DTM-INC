@@ -2,7 +2,7 @@
 // client you use in Route Handlers and Server Components to run queries
 // **under the user's RLS context**. That is intentional: we want RLS to do
 // half the enforcement work.
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getServerEnv, PublicEnv } from "@/lib/env";
@@ -11,19 +11,16 @@ export async function getSupabaseServer() {
   const cookieStore = await cookies();
   return createServerClient(PublicEnv.supabaseUrl, PublicEnv.supabaseAnonKey, {
     cookies: {
-      get: (name: string) => cookieStore.get(name)?.value,
-      set: (name: string, value: string, options: CookieOptions) => {
-        try {
-          cookieStore.set({ name, value, ...options });
-        } catch {
-          // Called from a Server Component — middleware handles refresh.
-        }
+      getAll() {
+        return cookieStore.getAll();
       },
-      remove: (name: string, options: CookieOptions) => {
+      setAll(cookiesToSet) {
         try {
-          cookieStore.set({ name, value: "", ...options });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         } catch {
-          // no-op in Server Component context
+          // Called from a Server Component — middleware handles the refresh.
         }
       },
     },

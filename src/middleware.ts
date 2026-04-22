@@ -2,7 +2,7 @@
 // lives inside each Route Handler / Server Component (§10.1 layer 2); this
 // middleware is only the first coarse filter.
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = new Set<string>([
   "/", "/login", "/forgot-password", "/reset-password", "/privacy", "/health",
@@ -25,9 +25,14 @@ export async function middleware(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options: CookieOptions) => res.cookies.set({ name, value, ...options }),
-        remove: (name, options: CookieOptions) => res.cookies.set({ name, value: "", ...options }),
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
+          });
+        },
       },
     }
   );
