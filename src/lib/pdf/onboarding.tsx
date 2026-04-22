@@ -154,9 +154,13 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
 }
 
 export async function renderOnboardingPdf(input: OnboardingPdfInput): Promise<Buffer> {
-  const element = React.createElement(OnboardingPdfDoc, input);
-  // renderToBuffer expects a Document element.
-  return renderToBuffer(element as unknown as React.ReactElement);
+  // OnboardingPdfDoc returns a <Document> at runtime, but TS types the
+  // element by the component's props (OnboardingPdfInput), not by what
+  // it returns. renderToBuffer wants ReactElement<DocumentProps> — cast
+  // through the function's actual parameter type so future signature
+  // changes re-surface here instead of silently widening.
+  const el = React.createElement(OnboardingPdfDoc, input) as unknown as Parameters<typeof renderToBuffer>[0];
+  return renderToBuffer(el);
 }
 
 // Suppress unused import lint
