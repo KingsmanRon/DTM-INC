@@ -2,7 +2,7 @@
 
 Internal-only, POPIA-aligned, single-practice surgical EHR for Dr. Thomas Mtshali Inc., Sebokeng.
 
-This repo is the v1 MVP per [`SPEC.md`](./SPEC.md). It replaces the paper onboarding form and the `DATE | NOTES` clinical sheet with digital equivalents, generates unique file numbers, and gives the doctor a searchable patient register — without touching third-party claims processing.
+This repo is the v1. It replaces the paper onboarding form and the `DATE | NOTES` clinical sheet with digital equivalents, generates unique file numbers, and gives the doctor a searchable patient register — without touching third-party claims processing.
 
 ---
 
