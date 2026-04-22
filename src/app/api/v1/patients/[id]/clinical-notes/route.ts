@@ -20,6 +20,10 @@ const NoteCreate = z.object({
   body: z.string().min(1).max(50_000),
 });
 
+class PatientNotFoundError extends Error {
+  constructor() { super("patient_not_found"); }
+}
+
 async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string; dek: Buffer }> {
   const admin = getSupabaseAdmin();
   const { data: existing } = await admin
@@ -33,6 +37,21 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
     const dek = unwrapDek(wrapped);
     return { dekId: existing.id, dek };
   }
+
+  // No DEK row yet — verify the patient exists (and the caller can see them
+  // under RLS) before allocating. Without this check, an arbitrary
+  // route-param UUID would reach the INSERT and rely solely on the FK to
+  // reject; a malformed UUID would short-circuit earlier, but a valid-format
+  // UUID for a deleted/never-existed patient would leak error detail and
+  // waste a KMS wrap round-trip.
+  const rls = await getSupabaseServer();
+  const { data: patient, error: patientErr } = await rls
+    .from("patients")
+    .select("id")
+    .eq("id", patientId)
+    .maybeSingle();
+  if (patientErr) throw new Error("patient_lookup_failed: " + patientErr.message);
+  if (!patient) throw new PatientNotFoundError();
 
   const dek = generateDek();
   const wrapped = wrapDek(dek);
@@ -66,7 +85,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Decrypt each note. All notes under a patient share the same DEK.
     const results: Array<{ id: string; note_date: string; body: string; is_finalised: boolean; amended_from_note_id: string | null; created_at: string; updated_at: string }> = [];
     if (notes && notes.length > 0) {
-      const { dek } = await getOrCreatePatientDek(id);
+      let dekHandle: { dek: Buffer } | null = null;
+      try {
+        dekHandle = await getOrCreatePatientDek(id);
+      } catch (e) {
+        if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+        throw e;
+      }
+      const { dek } = dekHandle;
       try {
         for (const n of notes) {
           const ct = Buffer.from(n.encrypted_body as unknown as string, "base64");
@@ -110,7 +136,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const input = await parseJson(req, NoteCreate);
 
-    const { dekId, dek } = await getOrCreatePatientDek(id);
+    let dekHandle: { dekId: string; dek: Buffer };
+    try {
+      dekHandle = await getOrCreatePatientDek(id);
+    } catch (e) {
+      if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+      throw e;
+    }
+    const { dekId, dek } = dekHandle;
     let noteId: string | null = null;
     try {
       const { ciphertext, nonce } = encryptNoteBody(dek, input.body);

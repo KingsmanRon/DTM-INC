@@ -33,13 +33,25 @@ function compute(prev, row) {
 }
 
 let prev = null;
-let cursor = "1970-01-01T00:00:00.000Z";
+// Composite cursor (created_at, id). A scalar created_at cursor with `gt`
+// silently skips any subsequent row that shares the cursor's timestamp —
+// common at millisecond resolution and fatal for chain verification.
+let cursorCreatedAt = null;
+let cursorId = null;
 let total = 0;
 
 while (true) {
-  const { data, error } = await supabase
+  let q = supabase
     .from("audit_logs").select("*")
-    .gt("created_at", cursor).order("created_at", { ascending: true }).limit(500);
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(500);
+  if (cursorCreatedAt && cursorId) {
+    q = q.or(
+      `created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`
+    );
+  }
+  const { data, error } = await q;
   if (error) { console.error("db error:", error.message); process.exit(3); }
   if (!data || data.length === 0) break;
   for (const row of data) {
@@ -51,9 +63,11 @@ while (true) {
       process.exit(1);
     }
     prev = entry_hash;
-    cursor = row.created_at;
+    cursorCreatedAt = row.created_at;
+    cursorId = row.id;
     total++;
   }
+  if (data.length < 500) break;
 }
 
 console.log(`OK · verified ${total} audit rows`);

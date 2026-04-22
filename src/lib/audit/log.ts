@@ -1,14 +1,17 @@
 // Append-only, hash-chained audit log (§10.5, §FR-11).
 //
 // Design:
-//   1. Each entry's `entry_hash = sha256(prev_hash || canonical_json(row_minus_hash))`.
-//   2. `prev_hash` is read inside a transaction under SERIALIZABLE isolation so
-//      two concurrent writes cannot pick the same prev_hash.
-//   3. The application DB role has no UPDATE/DELETE on audit_logs (0002_rls_policies.sql).
-//   4. Writes go through the service-role client; a production deployment
-//      should swap this for a dedicated `audit_writer` Postgres connection
-//      (SUPABASE_AUDIT_DB_URL) for stronger isolation.
-//   5. A daily verifier job walks the chain and alerts on breaks
+//   1. Each entry's `entry_hash = sha256(prev_hash || "|" || canonical_json(row_minus_hash))`.
+//   2. Insert is delegated to the SECURITY DEFINER DB function
+//      `write_audit_entry`, which takes a tx-scoped advisory lock, re-reads
+//      the current tail, and refuses the insert if the caller's expected
+//      prev_hash doesn't match. On mismatch it raises SQLSTATE '40001' and we
+//      retry — this is how we get atomic read-tail-then-insert without
+//      SERIALIZABLE isolation at the session level.
+//   3. The function is owned by `audit_writer` (0002) and service_role no
+//      longer has direct INSERT on audit_logs (0006), so a stolen service-
+//      role key cannot append rows bypassing the chain check.
+//   4. A daily verifier walks the chain and alerts on breaks
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -53,46 +56,67 @@ function computeEntryHash(prevHash: string | null, row: Record<string, unknown>)
   return h.digest("hex");
 }
 
-// NOTE: this is a best-effort transactional read-prev-then-insert. For the
-// production Railway service, replace with a single SQL call to a plpgsql
-// function that does SELECT ... FOR UPDATE on the last row inside the same tx.
+const MAX_TAIL_COLLISION_RETRIES = 5;
+
 export async function writeAudit(input: AuditInput): Promise<void> {
   const admin = getSupabaseAdmin();
 
-  const { data: last } = await admin
-    .from("audit_logs")
-    .select("entry_hash")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  for (let attempt = 0; attempt < MAX_TAIL_COLLISION_RETRIES; attempt++) {
+    const { data: last, error: readErr } = await admin
+      .from("audit_logs")
+      .select("entry_hash")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  const prevHash = last?.entry_hash ?? null;
+    if (readErr) {
+      console.error("[audit] tail read failed", { action: input.action, error: readErr.message });
+      return;
+    }
 
-  const createdAt = new Date().toISOString();
-  const row = {
-    actor_user_id: input.actorUserId,
-    actor_role: input.actorRole,
-    action: input.action,
-    entity_type: input.entityType ?? null,
-    entity_id: input.entityId ?? null,
-    patient_id: input.patientId ?? null,
-    metadata_json: input.metadata ?? {},
-    ip_address: input.ipAddress ?? null,
-    user_agent: input.userAgent ?? null,
-    created_at: createdAt,
-    prev_hash: prevHash,
-  };
+    const prevHash = last?.entry_hash ?? null;
+    const createdAt = new Date().toISOString();
+    const row = {
+      actor_user_id: input.actorUserId,
+      actor_role: input.actorRole,
+      action: input.action,
+      entity_type: input.entityType ?? null,
+      entity_id: input.entityId ?? null,
+      patient_id: input.patientId ?? null,
+      metadata_json: input.metadata ?? {},
+      ip_address: input.ipAddress ?? null,
+      user_agent: input.userAgent ?? null,
+      created_at: createdAt,
+      prev_hash: prevHash,
+    };
+    const entryHash = computeEntryHash(prevHash, row);
 
-  const entryHash = computeEntryHash(prevHash, row);
+    const { error } = await admin.rpc("write_audit_entry", {
+      p_expected_prev_hash: prevHash,
+      p_entry_hash: entryHash,
+      p_actor_user_id: input.actorUserId,
+      p_actor_role: input.actorRole,
+      p_action: input.action,
+      p_entity_type: input.entityType ?? null,
+      p_entity_id: input.entityId ?? null,
+      p_patient_id: input.patientId ?? null,
+      p_metadata_json: input.metadata ?? {},
+      p_ip_address: input.ipAddress ?? null,
+      p_user_agent: input.userAgent ?? null,
+      p_created_at: createdAt,
+    });
 
-  const { error } = await admin.from("audit_logs").insert({ ...row, entry_hash: entryHash });
-  if (error) {
-    // Audit failures are critical. Log to server stderr; surface to monitoring.
-    // Do NOT throw into user request flow — we don't want a missing audit to
-    // block a legitimate patient save. Instead, this is picked up by the
-    // daily verifier (scripts/verify-audit-chain.mjs) and Sentry.
+    if (!error) return;
+
+    // 40001 = tail moved between our read and the function's re-check.
+    // Re-read and recompute with the new tail; do not throw into user flow.
+    if ((error as { code?: string }).code === "40001") continue;
+
     console.error("[audit] insert failed", { action: input.action, error: error.message });
+    return;
   }
+
+  console.error("[audit] insert failed after retries", { action: input.action });
 }
 
 // Chain verification utility. Used by the daily cron (AC-7) and the
@@ -100,15 +124,30 @@ export async function writeAudit(input: AuditInput): Promise<void> {
 export async function verifyChain(): Promise<{ ok: boolean; brokenAt?: string }> {
   const admin = getSupabaseAdmin();
   const pageSize = 1000;
-  let cursor: string | null = null;
+  // Composite cursor (created_at, id): `created_at` has millisecond-resolution
+  // ties in practice, so filtering with `gt(created_at, cursor)` alone skips
+  // any subsequent row that shares the cursor's timestamp. We instead page on
+  // (created_at, id) lexicographically.
+  let cursorCreatedAt: string | null = null;
+  let cursorId: string | null = null;
   let prevHash: string | null = null;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    let q = admin.from("audit_logs").select("*").order("created_at", { ascending: true }).limit(pageSize);
-    if (cursor) q = q.gt("created_at", cursor);
+    let q = admin
+      .from("audit_logs")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(pageSize);
+    if (cursorCreatedAt && cursorId) {
+      // (created_at, id) > (cursor_created_at, cursor_id)
+      q = q.or(
+        `created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`
+      );
+    }
     const { data, error } = await q;
-    if (error) return { ok: false, brokenAt: cursor ?? "unknown" };
+    if (error) return { ok: false, brokenAt: cursorId ?? "unknown" };
     if (!data || data.length === 0) return { ok: true };
 
     for (const row of data) {
@@ -129,7 +168,8 @@ export async function verifyChain(): Promise<{ ok: boolean; brokenAt?: string }>
       });
       if (expected !== entry_hash) return { ok: false, brokenAt: row.id };
       prevHash = entry_hash;
-      cursor = row.created_at;
+      cursorCreatedAt = row.created_at;
+      cursorId = row.id;
     }
 
     if (data.length < pageSize) return { ok: true };

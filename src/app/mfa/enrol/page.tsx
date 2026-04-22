@@ -20,6 +20,7 @@ export default function MfaEnrolPage() {
       const supabase = getSupabaseBrowser();
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
       if (error) { setError(error.message); return; }
+      if (data.type !== "totp") { setError("Unexpected MFA factor type"); return; }
       setFactorId(data.id);
       setQr(data.totp.qr_code);
       setSecret(data.totp.secret);

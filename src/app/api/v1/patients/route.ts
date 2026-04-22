@@ -40,77 +40,61 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/v1/patients — create a new patient from the onboarding form.
-// Atomically allocates a file number via the SECURITY DEFINER DB function.
+// The transactional fan-out (patient + 6 sub-resources) is done by the
+// onboard_patient RPC. This handler's job is auth, consent verification, and
+// audit writes.
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole(["doctor", "staff"]);
     const payload = await parseJson(req, OnboardingPayload);
+    const { consent } = payload;
 
-    const admin = getSupabaseAdmin();
-
-    // 1. Allocate file number (atomic, concurrency-safe — §FR-4).
-    const { data: fnData, error: fnErr } = await admin.rpc("allocate_file_number", { p_year: null, p_prefix: null });
-    if (fnErr || !fnData) return jsonError(500, "file_number_allocation_failed", fnErr?.message);
-    const fileNumber = fnData as unknown as string;
-
-    // 2. Insert patient. Wrapped in "transaction" via sequential inserts; a
-    //    single RPC would be preferable — see follow-up ticket.
-    const { section_a: a, section_b: b, section_c: c, section_d: d, section_e: e, consent } = payload;
-    const dependants = payload.dependants ?? [];
-
-    const { data: patient, error: pErr } = await admin
-      .from("patients")
-      .insert({
-        file_number: fileNumber,
-        title: a.title,
-        first_names: a.first_names,
-        surname: a.surname,
-        id_number: a.id_number,
-        id_type: a.id_type,
-        id_country: a.id_country ?? null,
-        email: a.email || null,
-        phone: a.phone,
-        address: a.address,
-        payer_type: c.is_private_payer ? "private" : "medical_aid",
-        created_by: session.userId,
-        updated_by: session.userId,
-      })
-      .select("id, file_number")
+    // Consent verification — re-derive the hash server-side from the
+    // currently-active consent body in practice_settings. If the client's
+    // claimed hash doesn't match, the user signed stale text (e.g. admin
+    // updated the consent body while the wizard was open). Reject.
+    const supabase = await getSupabaseServer();
+    const { data: settings, error: settingsErr } = await supabase
+      .from("practice_settings")
+      .select("active_consent_version, active_consent_body")
+      .eq("id", 1)
       .single();
-
-    if (pErr || !patient) return jsonError(500, "patient_insert_failed", pErr?.message);
-
-    const patientId = patient.id;
-    const common = { patient_id: patientId, created_by: session.userId, updated_by: session.userId };
-
-    await admin.from("patient_account_responsible").insert({ ...common, ...b });
-    await admin.from("patient_medical_aid").insert({
-      ...common,
-      same_as_responsible: c.same_as_responsible,
-      main_member_name: c.main_member_name || null,
-      medical_aid_name: c.medical_aid_name || null,
-      membership_number: c.membership_number || null,
-      plan: c.plan || null,
-      other_plan_detail: c.other_plan_detail || null,
-    });
-    await admin.from("patient_emergency_contacts").insert({ ...common, ...d });
-    await admin.from("patient_referrals").insert({ ...common, ...e });
-    if (dependants.length) {
-      await admin.from("patient_dependants").insert(dependants.map((dep) => ({ ...common, ...dep })));
+    if (settingsErr || !settings) {
+      return jsonError(500, "consent_settings_unavailable", settingsErr?.message);
+    }
+    const serverHash = createHash("sha256")
+      .update(`${settings.active_consent_version}::${settings.active_consent_body}`, "utf8")
+      .digest("hex");
+    if (
+      consent.consent_text_version !== settings.active_consent_version ||
+      consent.consent_text_hash !== serverHash
+    ) {
+      return jsonError(
+        422,
+        "consent_body_out_of_date",
+        "The active consent text has changed since this form was loaded. Please reload and re-capture consent."
+      );
     }
 
-    // Consent: immutable; verify hash matches what the client claims.
-    const expectedHash = createHash("sha256").update(consent.signature_value, "utf8").digest("hex");
-    void expectedHash; // consent_text_hash is computed over consent TEXT, not signature; kept for future integrity checks
-    await admin.from("consent_records").insert({
-      patient_id: patientId,
-      consent_text_version: consent.consent_text_version,
-      consent_text_hash: consent.consent_text_hash,
-      accepted_by_user_id: session.userId,
-      signature_type: consent.signature_type,
-      signature_value: consent.signature_value,
-      patient_present_attestation: consent.patient_present_attestation,
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.rpc("onboard_patient", {
+      p_actor_user_id: session.userId,
+      p_section_a: payload.section_a,
+      p_section_b: payload.section_b,
+      p_section_c: payload.section_c,
+      p_section_d: payload.section_d,
+      p_section_e: payload.section_e,
+      p_dependants: payload.dependants ?? [],
+      p_consent: consent,
     });
+    if (error) return jsonError(500, "onboarding_failed", error.message);
+
+    // RPC returns setof (patient_id, file_number); supabase-js surfaces it as
+    // an array of one row.
+    const row = Array.isArray(data) ? data[0] : data;
+    const patientId = row?.patient_id as string | undefined;
+    const fileNumber = row?.file_number as string | undefined;
+    if (!patientId || !fileNumber) return jsonError(500, "onboarding_failed", "no row returned");
 
     await writeAudit({
       actorUserId: session.userId,

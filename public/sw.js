@@ -2,13 +2,18 @@
 // §FR-14: caches APP SHELL ONLY. Never caches /api/** responses — those
 // contain patient data. All API responses also carry `Cache-Control: no-store`
 // from next.config.mjs as a belt-and-braces measure.
+//
+// SHELL_URLS is limited to truly static, public assets. HTML pages (/login,
+// /dashboard, /privacy, /) are NOT precached because:
+//   • /dashboard and other authenticated routes 302 to /login when the user
+//     is logged out — precaching that redirect would serve stale auth state.
+//   • /login and /privacy may embed build-time stamps or updated text; the
+//     network-first 'document' handler below already falls back to cache if
+//     offline, so a cold navigation still works when the asset is in cache.
+// Keep SHELL_URLS to things that don't change per-user and carry no data.
 
-const CACHE = "dtm-shell-v1";
+const CACHE = "dtm-shell-v2";
 const SHELL_URLS = [
-  "/",
-  "/login",
-  "/dashboard",
-  "/privacy",
   "/manifest.webmanifest",
   "/icons/favicon.svg",
 ];
@@ -35,11 +40,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // App shell strategy: network-first for HTML, cache-first for static assets.
+  // Network-only for HTML. We used to cache the document and fall back to
+  // `/`, but that can serve stale auth state (e.g. a logged-out /dashboard
+  // redirect) after the user has logged in, or leak content from a previous
+  // session on a shared device. The tradeoff is no offline page — acceptable
+  // for a clinic workstation app.
   if (request.destination === "document") {
-    event.respondWith(
-      fetch(request).catch(() => caches.match(request).then((r) => r ?? caches.match("/")))
-    );
+    event.respondWith(fetch(request));
     return;
   }
 
