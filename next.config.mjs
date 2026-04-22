@@ -2,9 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: {
-    serverActions: { bodySizeLimit: "25mb" },
-  },
+  // serverActions are stable in Next 15.1+; bodySizeLimit moved out of the
+  // `experimental` namespace. Upload pathway for documents uses a FormData
+  // POST to a Route Handler (not a server action), so 25 MB is the limit
+  // we care about there — already enforced in the route. Keeping this key
+  // as a defence-in-depth in case a future contributor wires an action.
+  serverActions: { bodySizeLimit: "25mb" },
   async headers() {
     const securityHeaders = [
       { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },

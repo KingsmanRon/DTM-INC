@@ -66,8 +66,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return jsonError(403, "access_window_expired");
     }
 
-    // 3. Fetch + decrypt notes. Same envelope flow as doctor, but bypassing
-    //    RLS via the service-role client — gated by every check above.
+    // 3. AUDIT BEFORE ACCESS. Write the break_glass_access row BEFORE fetching
+    //    and decrypting any notes. If the decrypt crashes, the response is
+    //    dropped by the network, or an attacker injects a panic mid-flight,
+    //    the attempt is still recorded. Auditing after the decrypt would
+    //    leave a hole where the data was accessed but no audit row exists
+    //    — that is the whole class of defect break-glass is designed to
+    //    prevent.
+    await writeAudit({
+      actorUserId: session.userId,
+      actorRole: "admin",
+      action: "break_glass_access",
+      entityType: "break_glass_requests",
+      entityId: id,
+      patientId: request.target_patient_id,
+      metadata: {
+        request_id: id,
+        access_window_ends: new Date(accessWindowEnds!).toISOString(),
+        phase: "pre_fetch",
+      },
+      ipAddress: clientIp(req),
+      userAgent: req.headers.get("user-agent"),
+    });
+
+    // 4. Fetch + decrypt notes. Same envelope flow as doctor, but bypassing
+    //    RLS via the service-role client — gated by every check above plus
+    //    the audit row we just wrote.
     const { data: keyRow } = await admin
       .from("patient_encryption_keys")
       .select("id, wrapped_dek")
@@ -101,22 +125,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         zero(dek);
       }
     }
-
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: "admin",
-      action: "break_glass_access",
-      entityType: "break_glass_requests",
-      entityId: id,
-      patientId: request.target_patient_id,
-      metadata: {
-        request_id: id,
-        note_count: results.length,
-        access_window_ends: new Date(accessWindowEnds!).toISOString(),
-      },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
 
     return jsonOk({ notes: results, access_window_ends: new Date(accessWindowEnds!).toISOString() });
   } catch (err) {
