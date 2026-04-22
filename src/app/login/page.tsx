@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 // Next 15 static-prerenders this route by default. useSearchParams() is a
@@ -18,7 +18,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
   const [email, setEmail] = useState("");
@@ -32,9 +31,13 @@ function LoginForm() {
     setError(null);
     const supabase = getSupabaseBrowser();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) { setError(error.message); return; }
-    router.push(next);
+    if (error) { setBusy(false); setError(error.message); return; }
+    // Full-page navigation (not router.push) so the browser re-issues the
+    // request with the just-written auth cookies attached. router.push is a
+    // client transition that can race the cookie write against the RSC
+    // fetch, leaving the server to run the layout without a session and
+    // redirect back to /login. See Supabase Next.js SSR notes.
+    window.location.assign(next);
   }
 
   return (

@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 // TOTP challenge for an already-enrolled user. Elevates AAL1 → AAL2.
 export default function MfaChallengePage() {
-  const router = useRouter();
   const [factorId, setFactorId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,10 +15,10 @@ export default function MfaChallengePage() {
       const supabase = getSupabaseBrowser();
       const { data } = await supabase.auth.mfa.listFactors();
       const totp = data?.totp?.find((f) => f.status === "verified");
-      if (!totp) { router.replace("/mfa/enrol"); return; }
+      if (!totp) { window.location.assign("/mfa/enrol"); return; }
       setFactorId(totp.id);
     })();
-  }, [router]);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,10 +28,9 @@ export default function MfaChallengePage() {
     const { data: chal, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
     if (cErr || !chal) { setError(cErr?.message ?? "Challenge failed"); setBusy(false); return; }
     const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: chal.id, code });
-    setBusy(false);
-    if (vErr) { setError(vErr.message); return; }
-    router.push("/dashboard");
-    router.refresh();
+    if (vErr) { setBusy(false); setError(vErr.message); return; }
+    // Full-page navigation — see login/page.tsx for why router.push races the cookie write.
+    window.location.assign("/dashboard");
   }
 
   return (
