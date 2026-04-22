@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
 
     // 2. Insert patient. Wrapped in "transaction" via sequential inserts; a
     //    single RPC would be preferable — see follow-up ticket.
-    const { section_a: a, section_b: b, section_c: c, section_d: d, section_e: e, dependants, consent } = payload;
+    const { section_a: a, section_b: b, section_c: c, section_d: d, section_e: e, consent } = payload;
+    const dependants = payload.dependants ?? [];
 
     const { data: patient, error: pErr } = await admin
       .from("patients")
