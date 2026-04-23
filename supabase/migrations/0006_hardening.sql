@@ -17,6 +17,17 @@
 set statement_timeout = 0;
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 0. Grant audit_writer the privileges needed to own a public-schema function.
+-- ═══════════════════════════════════════════════════════════════════════════
+-- On PG 15+ the `public` schema no longer grants CREATE to non-owners, so
+-- `alter function ... owner to audit_writer` below would fail with
+-- `permission denied for schema public`. USAGE is needed so the function
+-- body can resolve `audit_logs`, enum types, and helpers under SECURITY
+-- DEFINER (which runs as the owner).
+
+grant usage, create on schema public to audit_writer;
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- 1. write_audit_entry — serialised, tail-verified audit insert.
 -- ═══════════════════════════════════════════════════════════════════════════
 --
