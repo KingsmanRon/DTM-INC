@@ -12,7 +12,9 @@
 --   a password, then run this script.
 --
 -- Usage (Supabase SQL Editor):
---   1. Edit the two values in the `params` CTE below.
+--   1. Edit the three values in the `params` CTE below (p_email, p_role,
+--      p_full_name). They're the single source of truth — used by both the
+--      upsert and the sanity-check select.
 --   2. Run the whole file.
 --   3. Sign in at /login.
 --
@@ -23,9 +25,9 @@
 
 with params as (
   select
-    'test@example.com'::text as p_email,        -- ← change me
-    'staff'::text             as p_role,         -- 'staff' | 'doctor' | 'admin'
-    'Test User'::text         as p_full_name     -- ← change me
+    'test@example.com'::text  as p_email,        -- ← change me
+    'staff'::role_name         as p_role,         -- 'staff' | 'doctor' | 'admin'
+    'Test User'::text          as p_full_name     -- ← change me
 ),
 au as (
   select u.id, u.email
@@ -33,23 +35,25 @@ au as (
   where u.email = p.p_email
 ),
 r as (
-  select id, name from roles, params p where roles.name = p.p_role::role_name
+  select id, name from roles, params p where roles.name = p.p_role
+),
+upserted as (
+  insert into app_users (id, email, full_name, role_id, status, mfa_enabled)
+  select au.id,
+         au.email,
+         p.p_full_name,
+         r.id,
+         'active'::user_status,
+         p.p_role in ('doctor','admin')
+  from params p, au, r
+  on conflict (id) do update
+     set status      = 'active',
+         role_id     = excluded.role_id,
+         full_name   = excluded.full_name,
+         updated_at  = now()
+  returning id, email, full_name, role_id, status
 )
-insert into app_users (id, email, full_name, role_id, status, mfa_enabled)
-select au.id,
-       au.email,
-       p.p_full_name,
-       r.id,
-       'active'::user_status,
-       case when p.p_role in ('doctor','admin') then true else false end
-from params p, au, r
-on conflict (id) do update
-   set status      = 'active',
-       role_id     = excluded.role_id,
-       full_name   = excluded.full_name,
-       updated_at  = now();
-
--- Sanity check — should return one row with status = 'active'.
+-- Sanity check — should return exactly one row with status = 'active'.
+-- Empty result means the email does not exist in auth.users (create it first).
 select u.email, u.full_name, u.status, r.name as role
-from app_users u join roles r on r.id = u.role_id
-where u.email = (select p_email from (select 'test@example.com'::text as p_email) p);
+from upserted u join roles r on r.id = u.role_id;
