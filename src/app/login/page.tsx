@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -19,8 +20,10 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
+  const debugAuth = params.get("debug_auth") === "1";
   // The /auth/callback route redirects here with ?error=<message> when PKCE
   // code exchange fails (bad/expired link, replay, missing code). Surface it
   // so the user knows why they ended up back on /login.
@@ -35,14 +38,30 @@ function LoginForm() {
     setBusy(true);
     setError(null);
     const supabase = getSupabaseBrowser();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setBusy(false); setError(error.message); return; }
-    // Full-page navigation (not router.push) so the browser re-issues the
-    // request with the just-written auth cookies attached. router.push is a
-    // client transition that can race the cookie write against the RSC
-    // fetch, leaving the server to run the layout without a session and
-    // redirect back to /login. See Supabase Next.js SSR notes.
-    window.location.assign(next);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const hasSession = Boolean(data.session);
+    const hasUser = Boolean(data.user);
+    const safeNextRoute = next.startsWith("/") ? next : "/dashboard";
+
+    if (debugAuth) {
+      console.info("[auth-login]", {
+        tokenCallSucceeded: !error,
+        hasSession,
+        hasUser,
+        userId: data.user?.id ?? null,
+        nextRoute: safeNextRoute,
+        errorMessage: error?.message ?? null,
+      });
+    }
+
+    if (error || !hasSession || !hasUser) {
+      setBusy(false);
+      setError(error?.message ?? "Sign-in succeeded, but no active session was established.");
+      return;
+    }
+
+    router.replace(safeNextRoute);
+    router.refresh();
   }
 
   return (
