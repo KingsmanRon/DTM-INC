@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { PublicEnv } from "@/lib/env";
 
 // TOTP enrolment flow.
 // Supabase returns a qr_code (SVG data URI) and a secret on enrol(). We
@@ -20,6 +21,19 @@ export default function MfaEnrolPage() {
   useEffect(() => {
     (async () => {
       const supabase = getSupabaseBrowser();
+      const siteUrl = resolveClientSiteUrl();
+      if (!siteUrl) {
+        setError("MFA enrolment cannot start: site URL is not configured correctly.");
+        return;
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (process.env.NODE_ENV !== "production") {
+        console.info("[mfa-enrol:init]", {
+          hasSupabaseUrl: Boolean(PublicEnv.supabaseUrl),
+          hasPublicKey: Boolean(PublicEnv.supabaseAnonKey),
+          hasSession: Boolean(session),
+        });
+      }
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       const { data: factors } = await supabase.auth.mfa.listFactors();
       const verified = factors?.totp?.find((f) => f.status === "verified");
@@ -37,7 +51,11 @@ export default function MfaEnrolPage() {
         await supabase.auth.mfa.unenroll({ factorId: staleUnverified.id });
       }
 
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        issuer: "DTM Inc",
+        friendlyName: "DTM Inc",
+      });
       if (error) { setError(error.message); return; }
       if (data.type !== "totp") { setError("Unexpected MFA factor type"); return; }
       setFactorId(data.id);
@@ -107,4 +125,11 @@ export default function MfaEnrolPage() {
       </form>
     </main>
   );
+}
+
+function resolveClientSiteUrl(): string | null {
+  const configured = PublicEnv.siteUrl?.trim();
+  if (configured && configured !== "undefined" && configured !== "null") return configured;
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return null;
 }
