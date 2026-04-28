@@ -4,11 +4,11 @@ import { z } from "zod";
 import { isValidSaId } from "./sa-id";
 
 export const TitleEnum = z.enum(["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"]);
-export const MaritalStatus = z.enum(["single", "married", "divorced", "widowed"]);
+export const MaritalStatus = z.enum(["single", "married", "divorced", "widowed", "partnered"]);
 export const PayerType = z.enum(["medical_aid", "private"]);
-export const IdType = z.enum(["sa_id", "passport"]);
+export const IdType = z.enum(["sa_id", "passport", "other"]);
 export const Sex = z.enum(["m", "f", "other"]);
-export const ReferrerType = z.enum(["gp", "specialist", "self", "other"]);
+export const ReferrerType = z.enum(["gp", "specialist", "hospital", "self", "other"]);
 
 const e164 = z.string().regex(/^\+?[0-9 ()-]{7,20}$/, "Invalid phone number");
 const emailOptional = z.string().email().optional().or(z.literal(""));
@@ -89,6 +89,7 @@ export const SectionE = z.object({
   referrer_type: ReferrerType,
   referrer_name: z.string().optional().or(z.literal("")),
   referrer_phone: z.string().optional().or(z.literal("")),
+  referral_notes: z.string().optional().or(z.literal("")),
 }).refine((v) => v.referrer_type === "self" || !!v.referrer_name, {
   message: "Referrer name required", path: ["referrer_name"],
 }).refine((v) => v.referrer_type === "self" || !!v.referrer_phone, {
