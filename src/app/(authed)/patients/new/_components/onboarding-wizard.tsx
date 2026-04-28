@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 
 type Draft = {
-  section_a: { title: string; first_names: string; surname: string; id_type: "sa_id" | "passport"; id_number: string; id_country?: string; email: string; phone: string; address: string };
+  section_a: { title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "other"; id_number: string; id_country?: string; email: string; phone: string; address: string };
   section_b: { same_as_patient: boolean; title: string; first_names: string; surname: string; id_number: string; date_of_birth: string; marital_status: string; email: string; phone: string; home_address: string; spouse_partner_phone: string; spouse_partner_work_phone: string; employer_name: string; occupation: string; work_address: string; work_phone: string };
   section_c: { same_as_responsible: boolean; main_member_name: string; medical_aid_name: string; membership_number: string; plan: string; other_plan_detail: string; is_private_payer: boolean };
   section_d: { name: string; relationship: string; address: string; email: string; phone: string };
-  section_e: { referrer_type: "gp" | "specialist" | "self" | "other"; referrer_name: string; referrer_phone: string };
+  section_e: { referrer_type: "gp" | "specialist" | "hospital" | "self" | "other"; referrer_name: string; referrer_phone: string; referral_notes: string };
   dependants: Array<{ name: string; sex: "m" | "f" | "other"; date_of_birth: string; dependant_code: string; allergies: string }>;
   consent: { signature_type: "typed_name" | "drawn_signature"; signature_value: string; patient_present_attestation: boolean };
 };
@@ -19,7 +19,7 @@ const emptyDraft: Draft = {
   section_b: { same_as_patient: false, title: "Mr", first_names: "", surname: "", id_number: "", date_of_birth: "", marital_status: "single", email: "", phone: "+27", home_address: "", spouse_partner_phone: "", spouse_partner_work_phone: "", employer_name: "", occupation: "", work_address: "", work_phone: "" },
   section_c: { same_as_responsible: true, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
-  section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "" },
+  section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "", referral_notes: "" },
   dependants: [],
   consent: { signature_type: "typed_name", signature_value: "", patient_present_attestation: false },
 };
@@ -153,9 +153,10 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                 </select>
               </Field>
               <Field label="ID type">
-                <select className="input" value={A.id_type} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" } })}>
+                <select className="input" value={A.id_type} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "other" } })}>
                   <option value="sa_id">SA ID</option>
                   <option value="passport">Passport</option>
+                  <option value="other">Other</option>
                 </select>
               </Field>
               <Field label="First names" required>
@@ -164,7 +165,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
               <Field label="Surname" required>
                 <input className="input" value={A.surname} onChange={(e) => setDraft({ ...draft, section_a: { ...A, surname: e.target.value } })} />
               </Field>
-              <Field label={A.id_type === "sa_id" ? "SA ID number" : "Passport"} required error={saIdError ?? undefined}>
+              <Field label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "ID number"} required error={saIdError ?? undefined}>
                 <input className="input font-mono" value={A.id_number} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_number: e.target.value } })} />
               </Field>
               {A.id_type === "passport" && (
@@ -211,6 +212,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   <option value="married">Married</option>
                   <option value="divorced">Divorced</option>
                   <option value="widowed">Widowed</option>
+                  <option value="partnered">Partnered</option>
                 </select>
               </Field>
               <Field label="Tel / Cell" required>
@@ -219,6 +221,16 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
               <Field label="Home address" required full>
                 <textarea className="input" rows={2} value={B.home_address} onChange={(e) => setDraft({ ...draft, section_b: { ...B, home_address: e.target.value } })} />
               </Field>
+              {(B.marital_status === "married" || B.marital_status === "partnered") ? (
+                <>
+                  <Field label="Spouse / Partner tel / cell">
+                    <input className="input" value={B.spouse_partner_phone} onChange={(e) => setDraft({ ...draft, section_b: { ...B, spouse_partner_phone: e.target.value } })} />
+                  </Field>
+                  <Field label="Spouse / Partner work tel">
+                    <input className="input" value={B.spouse_partner_work_phone} onChange={(e) => setDraft({ ...draft, section_b: { ...B, spouse_partner_work_phone: e.target.value } })} />
+                  </Field>
+                </>
+              ) : null}
               <Field label="Employer"><input className="input" value={B.employer_name} onChange={(e) => setDraft({ ...draft, section_b: { ...B, employer_name: e.target.value } })} /></Field>
               <Field label="Occupation"><input className="input" value={B.occupation} onChange={(e) => setDraft({ ...draft, section_b: { ...B, occupation: e.target.value } })} /></Field>
               <Field label="Work address" full><input className="input" value={B.work_address} onChange={(e) => setDraft({ ...draft, section_b: { ...B, work_address: e.target.value } })} /></Field>
@@ -230,6 +242,9 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
         {step === 2 && (
           <>
             <h2 className="section-title">C — Medical aid</h2>
+            <p className="text-xs text-text-secondary">
+              Medical aid information is stored for records and authorised third-party handoff only. Claims are processed outside this application.
+            </p>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={C.is_private_payer} onChange={(e) => setDraft({ ...draft, section_c: { ...C, is_private_payer: e.target.checked } })} />
               Private payer (no medical aid)
@@ -283,6 +298,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                 <select className="input" value={E.referrer_type} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_type: e.target.value as Draft["section_e"]["referrer_type"] } })}>
                   <option value="gp">GP</option>
                   <option value="specialist">Specialist</option>
+                  <option value="hospital">Hospital</option>
                   <option value="self">Self-referred</option>
                   <option value="other">Other</option>
                 </select>
@@ -297,6 +313,9 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   </Field>
                 </>
               )}
+              <Field label="Referral notes" full>
+                <textarea className="input" rows={2} value={E.referral_notes} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referral_notes: e.target.value } })} />
+              </Field>
             </div>
           </>
         )}
@@ -307,7 +326,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
             <p className="text-xs text-text-secondary">Add one row per dependant. Zero dependants is fine.</p>
             <div className="space-y-3">
               {draft.dependants.map((dep, idx) => (
-                <div key={idx} className="grid grid-cols-5 gap-2 items-end">
+                <div key={idx} className="grid grid-cols-6 gap-2 items-end">
                   <Field label="Name"><input className="input" value={dep.name} onChange={(e) => {
                     const next = [...draft.dependants]; next[idx] = { ...dep, name: e.target.value }; setDraft({ ...draft, dependants: next });
                   }} /></Field>
@@ -323,6 +342,9 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   }} /></Field>
                   <Field label="Code"><input className="input" value={dep.dependant_code} onChange={(e) => {
                     const next = [...draft.dependants]; next[idx] = { ...dep, dependant_code: e.target.value }; setDraft({ ...draft, dependants: next });
+                  }} /></Field>
+                  <Field label="Allergies"><input className="input" value={dep.allergies} onChange={(e) => {
+                    const next = [...draft.dependants]; next[idx] = { ...dep, allergies: e.target.value }; setDraft({ ...draft, dependants: next });
                   }} /></Field>
                   <button className="btn-secondary" onClick={() => setDraft({ ...draft, dependants: draft.dependants.filter((_, i) => i !== idx) })}>Remove</button>
                 </div>
@@ -365,7 +387,9 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
 
         <div className="flex justify-between pt-4 border-t border-border-subtle">
           <button className="btn-secondary" disabled={step === 0} onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
-          <button className="btn-secondary" disabled={step === STEPS.length - 1} onClick={() => setStep(Math.min(STEPS.length - 1, step + 1))}>Next</button>
+          {step < STEPS.length - 1 ? (
+            <button className="btn-secondary" onClick={() => setStep(Math.min(STEPS.length - 1, step + 1))}>Next</button>
+          ) : <span />}
         </div>
       </div>
     </div>
