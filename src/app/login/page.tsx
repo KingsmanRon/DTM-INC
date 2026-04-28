@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -103,6 +104,10 @@ function LoginShell(props: {
         <button type="submit" className="btn-primary w-full" disabled={disabled || busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
+
+        <p className="text-text-secondary text-xs">
+          <Link href="/forgot-password" className="hover:text-accent-teal">Forgot password?</Link>
+        </p>
 
         <p className="text-text-secondary text-xs">
           Doctor and admin accounts require MFA (TOTP). You will be prompted on first sign-in.
