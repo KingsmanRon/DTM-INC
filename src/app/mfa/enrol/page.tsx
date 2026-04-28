@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 // TOTP enrolment flow.
@@ -8,6 +9,7 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 // render the QR, have the user scan it in Authenticator / 1Password, then
 // call verify() with a fresh 6-digit code to elevate to AAL2.
 export default function MfaEnrolPage() {
+  const router = useRouter();
   const [qr, setQr] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -18,6 +20,23 @@ export default function MfaEnrolPage() {
   useEffect(() => {
     (async () => {
       const supabase = getSupabaseBrowser();
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const verified = factors?.totp?.find((f) => f.status === "verified");
+      if (verified) {
+        if (aal?.currentLevel === "aal2") {
+          router.replace("/dashboard");
+          return;
+        }
+        router.replace("/mfa/challenge");
+        return;
+      }
+
+      const staleUnverified = factors?.totp?.find((f) => f.status !== "verified");
+      if (staleUnverified) {
+        await supabase.auth.mfa.unenroll({ factorId: staleUnverified.id });
+      }
+
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
       if (error) { setError(error.message); return; }
       if (data.type !== "totp") { setError("Unexpected MFA factor type"); return; }
@@ -25,7 +44,7 @@ export default function MfaEnrolPage() {
       setQr(data.totp.qr_code);
       setSecret(data.totp.secret);
     })();
-  }, []);
+  }, [router]);
 
   async function onVerify(e: React.FormEvent) {
     e.preventDefault();
@@ -35,8 +54,14 @@ export default function MfaEnrolPage() {
     const { data: chal, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
     if (cErr || !chal) { setError(cErr?.message ?? "Challenge failed"); setBusy(false); return; }
     const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: chal.id, code });
+    if (vErr) { setBusy(false); setError(vErr.message); return; }
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== "aal2") {
+      setBusy(false);
+      setError("MFA verification succeeded, but the session was not elevated. Please try again.");
+      return;
+    }
     setBusy(false);
-    if (vErr) { setError(vErr.message); return; }
     // AAL2 obtained. Flip app_users.mfa_enabled so admin reports are accurate.
     await fetch("/api/v1/auth/mfa/mark-enrolled", { method: "POST", credentials: "same-origin" });
     // Full-page navigation so the AAL2 cookie is attached on the next request.

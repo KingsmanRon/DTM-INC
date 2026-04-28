@@ -14,7 +14,7 @@ export default async function AuthedLayout({ children }: { children: React.React
   }
 
   // FR-1: doctor + admin cannot reach authenticated routes without MFA.
-  const mfa = await resolveMfa(session.role);
+  const mfa = await resolveMfa(session.role, "/dashboard");
   if (mfa.action === "enrol") redirect("/mfa/enrol");
   if (mfa.action === "challenge") redirect("/mfa/challenge");
 
