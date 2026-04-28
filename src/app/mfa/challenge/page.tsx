@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 // TOTP challenge for an already-enrolled user. Elevates AAL1 → AAL2.
 export default function MfaChallengePage() {
+  const router = useRouter();
   const [factorId, setFactorId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -13,12 +15,17 @@ export default function MfaChallengePage() {
   useEffect(() => {
     (async () => {
       const supabase = getSupabaseBrowser();
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal?.currentLevel === "aal2") {
+        router.replace("/dashboard");
+        return;
+      }
       const { data } = await supabase.auth.mfa.listFactors();
       const totp = data?.totp?.find((f) => f.status === "verified");
-      if (!totp) { window.location.assign("/mfa/enrol"); return; }
+      if (!totp) { router.replace("/mfa/enrol"); return; }
       setFactorId(totp.id);
     })();
-  }, []);
+  }, [router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,6 +36,12 @@ export default function MfaChallengePage() {
     if (cErr || !chal) { setError(cErr?.message ?? "Challenge failed"); setBusy(false); return; }
     const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: chal.id, code });
     if (vErr) { setBusy(false); setError(vErr.message); return; }
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== "aal2") {
+      setBusy(false);
+      setError("MFA verification succeeded, but the session was not elevated. Please try again.");
+      return;
+    }
     // Full-page navigation — see login/page.tsx for why router.push races the cookie write.
     window.location.assign("/dashboard");
   }

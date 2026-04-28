@@ -17,14 +17,32 @@ export type MfaDecision =
   | { action: "enrol" }
   | { action: "challenge"; factorId: string };
 
-export async function resolveMfa(role: AppRole): Promise<MfaDecision> {
+export async function resolveMfa(role: AppRole, route = "/dashboard"): Promise<MfaDecision> {
   if (role === "staff") return { action: "ok" };
 
   const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  const { data: factors } = await supabase.auth.mfa.listFactors();
+  const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+  const factorCount = factors?.totp?.length ?? 0;
+  const verifiedFactorCount = (factors?.totp ?? []).filter((f) => f.status === "verified").length;
   const totp = factors?.totp?.find((f) => f.status === "verified");
+  const mfaFailureReason = factorsError?.message
+    ?? aalError?.message
+    ?? (!totp ? "no_verified_totp_factor" : aal?.currentLevel !== "aal2" ? "aal_not_elevated" : null);
+
+  if (process.env.AUTH_DEBUG === "true") {
+    console.info("[auth-mfa]", {
+      route,
+      userId: user?.id ?? null,
+      aal: aal?.currentLevel ?? null,
+      factorCount,
+      verifiedFactorCount,
+      selectedFactorId: totp?.id ?? null,
+      mfaFailureReason,
+    });
+  }
 
   if (!totp) return { action: "enrol" };
   if (aal?.currentLevel !== "aal2") return { action: "challenge", factorId: totp.id };
