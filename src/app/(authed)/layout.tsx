@@ -6,15 +6,18 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import { LogoutButton } from "./_components/logout-button";
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
   const session = await resolveSession();
-  if (!session) redirect("/login");
+  if (!session) {
+    redirect(user ? "/unauthorised" : "/login");
+  }
 
   // FR-1: doctor + admin cannot reach authenticated routes without MFA.
   const mfa = await resolveMfa(session.role);
   if (mfa.action === "enrol") redirect("/mfa/enrol");
   if (mfa.action === "challenge") redirect("/mfa/challenge");
 
-  const supabase = await getSupabaseServer();
   const { data: settings } = await supabase
     .from("practice_settings")
     .select("practice_name, information_officer_name")
