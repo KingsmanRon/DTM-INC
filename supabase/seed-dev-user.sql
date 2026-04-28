@@ -33,7 +33,7 @@ au as (
   where u.email = p.p_email
 ),
 r as (
-  select id, name from roles, params p where roles.name = p.p_role
+  select id, name from roles, params p where roles.name = p.p_role::role_name
 )
 insert into app_users (id, email, full_name, role_id, status, mfa_enabled)
 select au.id,
