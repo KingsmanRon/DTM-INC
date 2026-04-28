@@ -14,6 +14,10 @@ export default function ResetPasswordPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters.");
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords don't match.");
       return;
@@ -40,7 +44,7 @@ export default function ResetPasswordPage() {
         <div>
           <h1 className="text-2xl font-semibold">Set a new password</h1>
           <p className="text-text-secondary text-sm">
-            Choose a strong password. You&apos;ll be asked to sign in again afterwards.
+            Minimum 12 characters. You&apos;ll be asked to sign in again afterwards.
           </p>
         </div>
 

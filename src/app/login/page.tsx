@@ -21,10 +21,14 @@ export default function LoginPage() {
 function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
+  // The /auth/callback route redirects here with ?error=<message> when PKCE
+  // code exchange fails (bad/expired link, replay, missing code). Surface it
+  // so the user knows why they ended up back on /login.
+  const initialError = params.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
