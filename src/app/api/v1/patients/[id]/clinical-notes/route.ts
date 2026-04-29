@@ -46,7 +46,7 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
 
   if (existing) {
     const wrapped = byteaToCryptoBuffer(existing.wrapped_dek);
-    const dek = unwrapDek(wrapped);
+    const dek = await unwrapDek(wrapped);
     return { dekId: existing.id, dek };
   }
 
@@ -66,7 +66,7 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
   if (!patient) throw new PatientNotFoundError();
 
   const dek = generateDek();
-  const wrapped = wrapDek(dek);
+  const wrapped = await wrapDek(dek);
   const { data: inserted, error } = await admin
     .from("patient_encryption_keys")
     .insert({

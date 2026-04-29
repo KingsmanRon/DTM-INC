@@ -8,6 +8,8 @@ const ServerEnv = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   SUPABASE_AUDIT_DB_URL: z.string().optional(),
   CLINICAL_NOTES_KEK_ID: z.string().default("vault:clinical-notes-kek/v1"),
+  CLINICAL_NOTES_KEY_PROVIDER: z.enum(["vault", "dev"]).default("vault"),
+  ALLOW_DEV_KEK_FALLBACK: z.coerce.boolean().default(true),
   CLINICAL_NOTES_KEK_DEV_KEY: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
@@ -15,6 +17,7 @@ const ServerEnv = z.object({
   SESSION_IDLE_TIMEOUT_DOCTOR_MIN: z.coerce.number().default(15),
   SESSION_IDLE_TIMEOUT_ADMIN_MIN: z.coerce.number().default(15),
   PDF_SERVICE_SHARED_SECRET: z.string().optional(),
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 }).superRefine((env, ctx) => {
   if (!env.CLINICAL_NOTES_KEK_DEV_KEY) return;
   try {
@@ -33,6 +36,7 @@ const ServerEnv = z.object({
       message: "must be base64 for a 32-byte key",
     });
   }
+
 });
 
 let cached: z.infer<typeof ServerEnv> | null = null;
