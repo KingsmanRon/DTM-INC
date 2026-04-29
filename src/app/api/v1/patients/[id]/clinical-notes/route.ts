@@ -6,6 +6,7 @@ import { writeAudit } from "@/lib/audit/log";
 import {
   encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
+import { byteaToCryptoBuffer, cryptoBufferToByteaHex } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -44,7 +45,7 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
   }
 
   if (existing) {
-    const wrapped = Buffer.from(existing.wrapped_dek as unknown as string, "base64");
+    const wrapped = byteaToCryptoBuffer(existing.wrapped_dek);
     const dek = unwrapDek(wrapped);
     return { dekId: existing.id, dek };
   }
@@ -70,7 +71,7 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
     .from("patient_encryption_keys")
     .insert({
       patient_id: patientId,
-      wrapped_dek: wrapped.toString("base64"),
+      wrapped_dek: cryptoBufferToByteaHex(wrapped),
       kek_id: process.env.CLINICAL_NOTES_KEK_ID ?? "vault:clinical-notes-kek/v1",
     })
     .select("id")
@@ -111,8 +112,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const { dek } = dekHandle;
       try {
         for (const n of notes) {
-          const ct = Buffer.from(n.encrypted_body as unknown as string, "base64");
-          const nonce = Buffer.from(n.nonce as unknown as string, "base64");
+          const ct = byteaToCryptoBuffer(n.encrypted_body);
+          const nonce = byteaToCryptoBuffer(n.nonce);
           results.push({
             id: n.id,
             note_date: n.note_date,
@@ -173,8 +174,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           patient_id: id,
           author_user_id: session.userId,
           note_date: input.note_date ?? new Date().toISOString().slice(0, 10),
-          encrypted_body: ciphertext.toString("base64"),
-          nonce: nonce.toString("base64"),
+          encrypted_body: cryptoBufferToByteaHex(ciphertext),
+          nonce: cryptoBufferToByteaHex(nonce),
           dek_id: dekId,
         })
         .select("id")
