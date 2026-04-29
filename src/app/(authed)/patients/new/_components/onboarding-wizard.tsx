@@ -25,6 +25,33 @@ const emptyDraft: Draft = {
 };
 
 const STEPS = ["A — Patient", "B — Responsible", "C — Medical aid", "D — Emergency", "E — Referral", "F — Dependants", "G — Consent"] as const;
+const CONSENT_SUMMARY_VERSION = "cards-v1";
+const CONSENT_CARDS = [
+  {
+    badge: "A",
+    title: "Treatment consent",
+    body:
+      "I consent to consultation, examination and treatment by Dr. Thomas Mtshali and to such investigations and procedures as may, in his clinical judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.",
+  },
+  {
+    badge: "B",
+    title: "Information processing under POPIA",
+    body:
+      "I authorise Dr. Thomas Mtshali Inc. (\"the Practice\") to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.",
+  },
+  {
+    badge: "C",
+    title: "Financial terms",
+    body:
+      "I accept personal responsibility for payment of fees not covered by my medical aid, including co-payments and shortfalls. I acknowledge cancellation/no-show terms and understand outstanding accounts may proceed to lawful collections processes.",
+  },
+  {
+    badge: "D",
+    title: "Dependants (where applicable)",
+    body:
+      "Where I am the main member or legal guardian of any dependant whose details I provide, I confirm I am authorised to give the above consents on their behalf.",
+  },
+] as const;
 
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
@@ -99,6 +126,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
         consent: {
           consent_text_version: props.consentVersion,
           consent_text_hash,
+          consent_summary_version: CONSENT_SUMMARY_VERSION,
           signature_type: draft.consent.signature_type,
           signature_value: draft.consent.signature_value,
           patient_present_attestation: draft.consent.patient_present_attestation,
@@ -357,32 +385,66 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
         )}
 
         {step === 6 && (
-          <>
-            <h2 className="section-title">G — Consent and declaration</h2>
-            <div className="bg-bg-primary border border-border-subtle rounded p-4 text-sm whitespace-pre-wrap">
-              {props.consentBody || "(No consent text configured. Admin must populate practice_settings.active_consent_body before onboarding.)"}
+          <div className="py-[28px] px-6">
+            <div className="mb-[22px]">
+              <h2 className="section-title">G — Consent and declaration</h2>
+              <p className="text-sm text-text-secondary mt-1">
+                Please review each statement, then capture signature and attestation to continue.
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Signature (typed full name)" required>
-                <input className="input" value={draft.consent.signature_value} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, signature_value: e.target.value } })} />
-              </Field>
+
+            {CONSENT_CARDS.map((card) => (
+              <section key={card.badge} className="w-full rounded-[10px] px-[18px] py-4 mb-[10px] bg-bg-primary border border-border-subtle">
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
+                    {card.badge}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-1">{card.title}</h3>
+                    <p className="text-sm text-text-secondary leading-7">{card.body}</p>
+                  </div>
+                </div>
+              </section>
+            ))}
+
+            <section className="w-full rounded-[10px] px-[18px] py-4 mb-[10px] bg-bg-primary border border-border-subtle">
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 shrink-0 rounded-full bg-accent-dtm-green/20 text-accent-dtm-green text-xs font-semibold grid place-items-center">
+                  E
+                </div>
+                <div className="flex-1 space-y-3">
+                  <h3 className="text-lg font-semibold">Full declaration text</h3>
+                  <div className="text-sm whitespace-pre-wrap text-text-secondary leading-7">
+                    {props.consentBody || "(No consent text configured. Admin must populate practice_settings.active_consent_body before onboarding.)"}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Signature (typed full name)" required>
+                      <input className="input" value={draft.consent.signature_value} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, signature_value: e.target.value } })} />
+                    </Field>
+                  </div>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" checked={draft.consent.patient_present_attestation} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, patient_present_attestation: e.target.checked } })} />
+                    <span>I attest the patient was physically present and consented to the above.</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <div className="mt-[22px] pt-[18px] border-t border-white/5 flex items-center gap-3">
+              <button className="btn-secondary" onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
+              <div className="flex-1">
+                {error ? <p className="text-state-danger text-sm">{error}</p> : null}
+                {issues.length > 0 ? (
+                  <ul className="text-state-danger text-sm list-disc pl-5">
+                    {issues.map((i) => <li key={i}>{i}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+              <button className="btn-primary" onClick={onSubmit} disabled={busy || !draft.consent.patient_present_attestation || !draft.consent.signature_value}>
+                {busy ? "Submitting…" : "Submit and generate file number"}
+              </button>
             </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" checked={draft.consent.patient_present_attestation} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, patient_present_attestation: e.target.checked } })} />
-              <span>I attest the patient was physically present and consented to the above.</span>
-            </label>
-
-            {error ? <p className="text-state-danger text-sm">{error}</p> : null}
-            {issues.length > 0 ? (
-              <ul className="text-state-danger text-sm list-disc pl-5">
-                {issues.map((i) => <li key={i}>{i}</li>)}
-              </ul>
-            ) : null}
-
-            <button className="btn-primary" onClick={onSubmit} disabled={busy || !draft.consent.patient_present_attestation || !draft.consent.signature_value}>
-              {busy ? "Submitting…" : "Submit and generate file number"}
-            </button>
-          </>
+          </div>
         )}
 
         <div className="flex justify-between pt-4 border-t border-border-subtle">

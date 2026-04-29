@@ -109,6 +109,7 @@ export const DependantSchema = z.object({
 export const ConsentCapture = z.object({
   consent_text_version: z.string().min(1),
   consent_text_hash: z.string().regex(/^[a-f0-9]{64}$/, "Must be sha256 hex"),
+  consent_summary_version: z.string().min(1),
   signature_type: z.enum(["typed_name", "drawn_signature"]),
   signature_value: z.string().min(1),
   patient_present_attestation: z.literal(true, {
