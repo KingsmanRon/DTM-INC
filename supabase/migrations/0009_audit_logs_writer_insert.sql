@@ -14,4 +14,4 @@ drop policy if exists audit_logs_writer_insert on audit_logs;
 
 create policy audit_logs_writer_insert on audit_logs
   for insert to audit_writer
-  with check (true);
+  with check (true); 
