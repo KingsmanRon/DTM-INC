@@ -447,12 +447,12 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           </div>
         )}
 
-        <div className="flex justify-between pt-4 border-t border-border-subtle">
-          <button className="btn-secondary" disabled={step === 0} onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
-          {step < STEPS.length - 1 ? (
+        {step < STEPS.length - 1 && (
+          <div className="flex justify-between pt-4 border-t border-border-subtle">
+            <button className="btn-secondary" disabled={step === 0} onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
             <button className="btn-secondary" onClick={() => setStep(Math.min(STEPS.length - 1, step + 1))}>Next</button>
-          ) : <span />}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer, getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import {
-  encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero,
+  encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
@@ -24,13 +24,24 @@ class PatientNotFoundError extends Error {
   constructor() { super("patient_not_found"); }
 }
 
+function isMissingSchemaError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  return code === "42P01" || code === "42703";
+}
+
 async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string; dek: Buffer }> {
   const admin = getSupabaseAdmin();
-  const { data: existing } = await admin
+  const { data: existing, error: existingErr } = await admin
     .from("patient_encryption_keys")
     .select("id, wrapped_dek")
     .eq("patient_id", patientId)
     .maybeSingle();
+  if (existingErr) {
+    if (isMissingSchemaError(existingErr)) {
+      throw new Error("notes_schema_unavailable");
+    }
+    throw new Error("dek_lookup_failed: " + existingErr.message);
+  }
 
   if (existing) {
     const wrapped = Buffer.from(existing.wrapped_dek as unknown as string, "base64");
@@ -80,7 +91,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .select("id, patient_id, author_user_id, note_date, encrypted_body, nonce, dek_id, is_finalised, finalised_at, amended_from_note_id, created_at, updated_at")
       .eq("patient_id", id)
       .order("created_at", { ascending: false });
-    if (error) return jsonError(500, "db_error", error.message);
+    if (error) {
+      if (isMissingSchemaError(error)) return jsonError(503, "notes_schema_unavailable", "Clinical notes schema is not deployed.");
+      return jsonError(500, "db_error", error.message);
+    }
 
     // Decrypt each note. All notes under a patient share the same DEK.
     const results: Array<{ id: string; note_date: string; body: string; is_finalised: boolean; amended_from_note_id: string | null; created_at: string; updated_at: string }> = [];
@@ -90,6 +104,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         dekHandle = await getOrCreatePatientDek(id);
       } catch (e) {
         if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+        if (e instanceof KeyManagementUnavailableError) return jsonError(503, "notes_unavailable", "Clinical notes encryption is not configured.");
+        if ((e as Error).message === "notes_schema_unavailable") return jsonError(503, "notes_schema_unavailable", "Clinical notes schema is not deployed.");
         throw e;
       }
       const { dek } = dekHandle;
@@ -141,6 +157,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       dekHandle = await getOrCreatePatientDek(id);
     } catch (e) {
       if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+      if (e instanceof KeyManagementUnavailableError) return jsonError(503, "notes_unavailable", "Clinical notes encryption is not configured.");
+      if ((e as Error).message === "notes_schema_unavailable") return jsonError(503, "notes_schema_unavailable", "Clinical notes schema is not deployed.");
       throw e;
     }
     const { dekId, dek } = dekHandle;
@@ -161,7 +179,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         })
         .select("id")
         .single();
-      if (error || !data) return jsonError(500, "db_error", error?.message);
+      if (error || !data) {
+        if (isMissingSchemaError(error)) return jsonError(503, "notes_schema_unavailable", "Clinical notes schema is not deployed.");
+        return jsonError(500, "db_error", error?.message);
+      }
       noteId = data.id;
     } finally {
       zero(dek);

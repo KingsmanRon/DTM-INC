@@ -24,7 +24,7 @@ export default async function NewPatientPage() {
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-semibold mb-2">New patient onboarding</h1>
       <p className="text-text-secondary text-sm mb-6">
-        Capture every section from the paper form. Drafts auto-save; file number is generated on submit.
+        Capture every section from the paper form. File number is generated on submit.
       </p>
 
       <OnboardingWizard

@@ -15,6 +15,24 @@ const ServerEnv = z.object({
   SESSION_IDLE_TIMEOUT_DOCTOR_MIN: z.coerce.number().default(15),
   SESSION_IDLE_TIMEOUT_ADMIN_MIN: z.coerce.number().default(15),
   PDF_SERVICE_SHARED_SECRET: z.string().optional(),
+}).superRefine((env, ctx) => {
+  if (!env.CLINICAL_NOTES_KEK_DEV_KEY) return;
+  try {
+    const buf = Buffer.from(env.CLINICAL_NOTES_KEK_DEV_KEY, "base64");
+    if (buf.length !== 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CLINICAL_NOTES_KEK_DEV_KEY"],
+        message: "must be base64 for a 32-byte key",
+      });
+    }
+  } catch {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["CLINICAL_NOTES_KEK_DEV_KEY"],
+      message: "must be base64 for a 32-byte key",
+    });
+  }
 });
 
 let cached: z.infer<typeof ServerEnv> | null = null;
