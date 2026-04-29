@@ -19,16 +19,30 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
   const [body, setBody] = useState("");
   const [noteDate, setNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
+    setLoading(true);
+    setError(null);
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes`, { credentials: "same-origin" });
-    if (res.ok) { const j = await res.json(); setNotes(j.notes ?? []); }
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.error ?? "Could not load clinical notes.");
+      setNotes([]);
+      setLoading(false);
+      return;
+    }
+    const j = await res.json();
+    setNotes(j.notes ?? []);
+    setLoading(false);
   }
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [patientId]);
 
   async function onAdd() {
     if (!body.trim()) return;
     setBusy(true);
+    setError(null);
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -36,14 +50,26 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
       body: JSON.stringify({ note_date: noteDate, body }),
     });
     setBusy(false);
-    if (res.ok) { setBody(""); await refresh(); }
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.error ?? "Could not save note.");
+      return;
+    }
+    setBody("");
+    await refresh();
   }
 
   async function onFinalise(noteId: string) {
     if (!confirm("Finalise this note? Future edits will create an amended copy.")) return;
-    await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
+    setError(null);
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
       method: "POST", credentials: "same-origin",
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.error ?? "Could not finalise note.");
+      return;
+    }
     await refresh();
   }
 
@@ -67,10 +93,13 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
         <button className="btn-primary" disabled={busy || !body.trim()} onClick={onAdd}>
           {busy ? "Saving…" : "Save note"}
         </button>
+        {error ? <p className="text-state-danger text-sm">{error}</p> : null}
       </div>
 
       <div className="space-y-3">
-        {notes.length === 0 ? (
+        {loading ? (
+          <p className="text-text-secondary text-sm">Loading notes…</p>
+        ) : notes.length === 0 ? (
           <p className="text-text-secondary text-sm">No notes yet.</p>
         ) : notes.map((n) => (
           <div key={n.id} className="card">
