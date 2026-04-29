@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer, getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import {
-  encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero,
+  encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
@@ -90,6 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         dekHandle = await getOrCreatePatientDek(id);
       } catch (e) {
         if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+        if (e instanceof KeyManagementUnavailableError) return jsonError(503, "notes_unavailable", "Clinical notes encryption is not configured.");
         throw e;
       }
       const { dek } = dekHandle;
@@ -141,6 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       dekHandle = await getOrCreatePatientDek(id);
     } catch (e) {
       if (e instanceof PatientNotFoundError) return jsonError(404, "not_found");
+      if (e instanceof KeyManagementUnavailableError) return jsonError(503, "notes_unavailable", "Clinical notes encryption is not configured.");
       throw e;
     }
     const { dekId, dek } = dekHandle;

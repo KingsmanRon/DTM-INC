@@ -61,9 +61,15 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
 
   async function onFinalise(noteId: string) {
     if (!confirm("Finalise this note? Future edits will create an amended copy.")) return;
-    await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
+    setError(null);
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
       method: "POST", credentials: "same-origin",
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.error ?? "Could not finalise note.");
+      return;
+    }
     await refresh();
   }
 

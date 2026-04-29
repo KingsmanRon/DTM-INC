@@ -13,17 +13,24 @@ const ALGO = "aes-256-gcm";
 const NONCE_BYTES = 12;
 const KEY_BYTES = 32;
 
+export class KeyManagementUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KeyManagementUnavailableError";
+  }
+}
+
 function getKek(): Buffer {
   const env = getServerEnv();
   if (!env.CLINICAL_NOTES_KEK_DEV_KEY) {
-    throw new Error(
+    throw new KeyManagementUnavailableError(
       "CLINICAL_NOTES_KEK_DEV_KEY not set and no KMS client is configured. " +
       "In production, wrap/unwrap must call Supabase Vault or a KMS."
     );
   }
   const buf = Buffer.from(env.CLINICAL_NOTES_KEK_DEV_KEY, "base64");
   if (buf.length !== KEY_BYTES) {
-    throw new Error(`CLINICAL_NOTES_KEK_DEV_KEY must decode to ${KEY_BYTES} bytes, got ${buf.length}`);
+    throw new KeyManagementUnavailableError(`CLINICAL_NOTES_KEK_DEV_KEY must decode to ${KEY_BYTES} bytes, got ${buf.length}`);
   }
   return buf;
 }
