@@ -59,6 +59,16 @@ async function getKek(): Promise<Buffer> {
   return decodeDevKey(env.CLINICAL_NOTES_KEK_DEV_KEY);
 }
 
+
+function decryptWrappedDekWithKek(wrapped: Buffer, kek: Buffer): Buffer {
+  const nonce = wrapped.subarray(0, NONCE_BYTES);
+  const tag = wrapped.subarray(wrapped.length - 16);
+  const ct = wrapped.subarray(NONCE_BYTES, wrapped.length - 16);
+  const decipher = createDecipheriv(ALGO, kek, nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
+
 export async function wrapDek(dek: Buffer): Promise<Buffer> {
   if (dek.length !== KEY_BYTES) throw new Error("DEK must be 32 bytes");
   const kek = await getKek();
@@ -70,13 +80,17 @@ export async function wrapDek(dek: Buffer): Promise<Buffer> {
 }
 
 export async function unwrapDek(wrapped: Buffer): Promise<Buffer> {
+  const env = getServerEnv();
   const kek = await getKek();
-  const nonce = wrapped.subarray(0, NONCE_BYTES);
-  const tag = wrapped.subarray(wrapped.length - 16);
-  const ct = wrapped.subarray(NONCE_BYTES, wrapped.length - 16);
-  const decipher = createDecipheriv(ALGO, kek, nonce);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]);
+  try {
+    return decryptWrappedDekWithKek(wrapped, kek);
+  } catch (primaryErr) {
+    if (env.CLINICAL_NOTES_KEY_PROVIDER !== "vault" || !env.ALLOW_DEV_KEK_FALLBACK || !env.CLINICAL_NOTES_KEK_DEV_KEY) {
+      throw primaryErr;
+    }
+    const fallbackKek = decodeDevKey(env.CLINICAL_NOTES_KEK_DEV_KEY);
+    return decryptWrappedDekWithKek(wrapped, fallbackKek);
+  }
 }
 
 export function generateDek(): Buffer {

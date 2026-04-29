@@ -69,3 +69,12 @@ select public.update_app_secret(
   - run with a role that can execute wrapper functions (service role / owner context).
 - Vault read fails at runtime:
   - verify `public.read_app_secret('clinical-notes-kek')` returns a value.
+
+## 8) Why fallback=false can fail after cutover
+If historical DEKs were wrapped with an older/local key, and Vault now returns a different key, unwrap will fail until keys are aligned.
+
+Transition strategy:
+1. Keep `ALLOW_DEV_KEK_FALLBACK=true` temporarily.
+2. Ensure Vault secret value matches the previously used key.
+3. Create at least one new clinical note and verify read/amend/finalise.
+4. Then set `ALLOW_DEV_KEK_FALLBACK=false`.
