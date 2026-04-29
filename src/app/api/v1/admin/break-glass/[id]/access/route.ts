@@ -22,6 +22,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { decryptNoteBody, unwrapDek, zero } from "@/lib/crypto/envelope";
+import { byteaToCryptoBuffer } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -107,12 +108,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const results: Array<{ id: string; note_date: string; body: string; is_finalised: boolean; created_at: string }> = [];
 
     if (keyRow && notes && notes.length > 0) {
-      const wrapped = Buffer.from(keyRow.wrapped_dek as unknown as string, "base64");
+      const wrapped = byteaToCryptoBuffer(keyRow.wrapped_dek);
       const dek = unwrapDek(wrapped);
       try {
         for (const n of notes) {
-          const ct = Buffer.from(n.encrypted_body as unknown as string, "base64");
-          const nonce = Buffer.from(n.nonce as unknown as string, "base64");
+          const ct = byteaToCryptoBuffer(n.encrypted_body);
+          const nonce = byteaToCryptoBuffer(n.nonce);
           results.push({
             id: n.id,
             note_date: n.note_date,
