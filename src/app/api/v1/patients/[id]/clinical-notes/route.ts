@@ -6,7 +6,7 @@ import { writeAudit } from "@/lib/audit/log";
 import {
   encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
-import { byteaToCryptoBuffer, cryptoBufferToByteaHex } from "@/lib/bytea";
+import { byteaToCryptoBuffer, cryptoBufferToBase64 } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -71,7 +71,7 @@ async function getOrCreatePatientDek(patientId: string): Promise<{ dekId: string
     .from("patient_encryption_keys")
     .insert({
       patient_id: patientId,
-      wrapped_dek: cryptoBufferToByteaHex(wrapped),
+      wrapped_dek: cryptoBufferToBase64(wrapped),
       kek_id: process.env.CLINICAL_NOTES_KEK_ID ?? "vault:clinical-notes-kek/v1",
     })
     .select("id")
@@ -174,8 +174,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           patient_id: id,
           author_user_id: session.userId,
           note_date: input.note_date ?? new Date().toISOString().slice(0, 10),
-          encrypted_body: cryptoBufferToByteaHex(ciphertext),
-          nonce: cryptoBufferToByteaHex(nonce),
+          encrypted_body: cryptoBufferToBase64(ciphertext),
+          nonce: cryptoBufferToBase64(nonce),
           dek_id: dekId,
         })
         .select("id")

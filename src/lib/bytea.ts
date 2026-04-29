@@ -1,62 +1,82 @@
 // Bytea I/O helpers for envelope-encrypted clinical notes.
 //
-// All three crypto inputs (wrapped_dek, encrypted_body, nonce) are stored in
-// Postgres `bytea` columns and accessed through PostgREST via supabase-js.
-// Historical rows were written by passing `Buffer.toString("base64")` straight
-// into the JSON payload; PostgREST forwarded the string unchanged and Postgres
-// parsed it as bytea *escape* format (no `\x` prefix), which preserves each
-// printable ASCII byte literally. The end result was bytea storing the UTF-8
-// of the Base64 text — auth-tag verification then fails on decrypt.
+// Background. All three crypto inputs (wrapped_dek, encrypted_body, nonce)
+// live in Postgres `bytea` columns and are accessed through PostgREST via
+// supabase-js. Historical writes called `Buffer.toString("base64")` and the
+// resulting string was stored in the bytea column as escape-format text —
+// each ASCII byte preserved verbatim. The end result is bytea holding the
+// UTF-8 of the Base64 representation, so AES-GCM auth-tag verification fails
+// on every read.
 //
-// `byteaToCryptoBuffer` accepts every shape we have observed and returns the
-// raw bytes the crypto code expects:
+// `byteaToCryptoBuffer` accepts the four shapes the route can encounter:
+//   1. Buffer / Uint8Array       — node-postgres bytea representation
+//   2. "\\x<hex>"                — Postgres canonical text form
+//   3. Base64 string             — PostgREST/Supabase JSON transport
+//   4. Base64 text inside bytea  — legacy bug, auto-unwrapped via heuristic
 //
-//   1. Buffer / Uint8Array               — node-postgres style (unused today)
-//   2. "\x<hex>"                         — Postgres canonical text form
-//   3. base64 string                     — PostgREST/Supabase JSON for new rows
-//   4. base64 *bytes* inside a Buffer    — legacy bug, auto-unwrapped
-//
-// `cryptoBufferToByteaHex` produces the `\x<hex>` text form used for writes
-// through supabase-js. Postgres autodetects the `\x` prefix and decodes hex
-// regardless of caller — verified against Postgres bytea_input semantics
-// (no special server config required).
+// `cryptoBufferToBase64` is the writer for the supabase-js / PostgREST path.
+// `cryptoBufferToByteaHex` is reserved for raw-SQL drivers (node-postgres)
+// where the `\\x<hex>` literal is parsed by Postgres itself; it MUST NOT be
+// used through PostgREST or the literal string ends up stored verbatim.
 
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+import { Buffer } from "node:buffer";
 
+/**
+ * Heuristic: does this Buffer's UTF-8 representation look like Base64 text?
+ *
+ * False-positive probability for raw cipher bytes is bounded by (64/256)^N,
+ * roughly 6e-8 for a 12-byte nonce and ~1e-36 for a 60-byte wrapped DEK.
+ * The fast-path ASCII check eliminates almost all binary cases before regex.
+ */
 function looksLikeBase64Text(buf: Buffer): boolean {
-  if (buf.length === 0 || buf.length % 4 !== 0) return false;
-  // Cheap byte-level check first — every byte must be a printable Base64
-  // character. Avoids a full UTF-8 decode for non-matching rows.
+  if (buf.length === 0) return false;
   for (let i = 0; i < buf.length; i++) {
-    const b = buf[i] as number;
-    const isAlpha = (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a);
-    const isDigit = b >= 0x30 && b <= 0x39;
-    const isSym = b === 0x2b /* + */ || b === 0x2f /* / */ || b === 0x3d /* = */;
-    if (!isAlpha && !isDigit && !isSym) return false;
+    if ((buf[i] as number) >= 0x80) return false;
   }
-  return BASE64_RE.test(buf.toString("ascii"));
+  const text = buf.toString("utf8").trim();
+  return (
+    text.length > 0 &&
+    text.length % 4 === 0 &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(text)
+  );
 }
 
 export function byteaToCryptoBuffer(value: unknown): Buffer {
-  if (value == null) throw new Error("bytea: null/undefined value");
+  let raw: Buffer;
 
   if (Buffer.isBuffer(value)) {
-    return looksLikeBase64Text(value) ? Buffer.from(value.toString("ascii"), "base64") : value;
-  }
-  if (value instanceof Uint8Array) {
-    const buf = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
-    return looksLikeBase64Text(buf) ? Buffer.from(buf.toString("ascii"), "base64") : buf;
-  }
-
-  if (typeof value === "string") {
-    if (value.startsWith("\\x")) return Buffer.from(value.slice(2), "hex");
-    if (BASE64_RE.test(value) && value.length % 4 === 0) return Buffer.from(value, "base64");
-    throw new Error("bytea: unrecognised string encoding");
+    raw = Buffer.from(value);
+  } else if (value instanceof Uint8Array) {
+    raw = Buffer.from(value);
+  } else if (typeof value === "string") {
+    raw = value.startsWith("\\x")
+      ? Buffer.from(value.slice(2), "hex")
+      : Buffer.from(value, "base64");
+  } else {
+    throw new Error("invalid_bytea_value");
   }
 
-  throw new Error(`bytea: unsupported value type ${typeof value}`);
+  if (looksLikeBase64Text(raw)) {
+    return Buffer.from(raw.toString("utf8"), "base64");
+  }
+  return raw;
 }
 
+/**
+ * Postgres bytea hex literal: '\\x<hex>'.
+ *
+ * Use ONLY with raw SQL drivers (node-postgres) where this string is cast to
+ * bytea by Postgres itself. Do NOT use through Supabase JS / PostgREST — the
+ * literal would be stored byte-for-byte and recreate the original bug.
+ */
 export function cryptoBufferToByteaHex(buf: Buffer): string {
-  return "\\x" + buf.toString("hex");
+  return `\\x${buf.toString("hex")}`;
+}
+
+/**
+ * Base64 string for PostgREST / Supabase JSON inserts to bytea columns.
+ * PostgREST 11+ accepts Base64 in JSON for bytea natively.
+ */
+export function cryptoBufferToBase64(buf: Buffer): string {
+  return buf.toString("base64");
 }
