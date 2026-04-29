@@ -409,7 +409,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
 
             <section className="w-full rounded-[10px] px-[18px] py-4 mb-[10px] bg-bg-primary border border-border-subtle">
               <div className="flex items-start gap-3">
-                <div className="w-7 h-7 shrink-0 rounded-full bg-accent-dtm-green/20 text-accent-dtm-green text-xs font-semibold grid place-items-center">
+                <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
                   E
                 </div>
                 <div className="flex-1 space-y-3">
