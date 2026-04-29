@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Note = {
   id: string;
@@ -14,6 +14,13 @@ type Note = {
 
 // Doctor-only tab. §FR-8: chronological list (newest first), date + body.
 // Matches the paper sheet's simplicity — no SOAP templates, no ICD-10.
+//
+// Clinical notes are append-only by policy: "Unfinalised" means "not yet
+// locked" (only the Finalise transition is permitted on the row itself).
+// To change wording, the doctor uses Amend, which creates a new note that
+// supersedes the original via amended_from_note_id; the original is
+// auto-finalised by the API. The chain is rendered with a "Supersedes"
+// label on the new note and a "Superseded" badge on the original.
 export function ClinicalNotesTab({ patientId }: { patientId: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [body, setBody] = useState("");
@@ -21,6 +28,21 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [amendingId, setAmendingId] = useState<string | null>(null);
+  const [amendBody, setAmendBody] = useState("");
+  const [amendDate, setAmendDate] = useState("");
+  const [amendBusy, setAmendBusy] = useState(false);
+
+  const byId = useMemo(() => {
+    const m = new Map<string, Note>();
+    for (const n of notes) m.set(n.id, n);
+    return m;
+  }, [notes]);
+  const supersededIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of notes) if (n.amended_from_note_id) s.add(n.amended_from_note_id);
+    return s;
+  }, [notes]);
 
   async function refresh() {
     setLoading(true);
@@ -60,7 +82,7 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
   }
 
   async function onFinalise(noteId: string) {
-    if (!confirm("Finalise this note? Future edits will create an amended copy.")) return;
+    if (!confirm("Finalise this note? It will be locked. To change it later, use Amend — which creates a new note linked to this one.")) return;
     setError(null);
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
       method: "POST", credentials: "same-origin",
@@ -70,6 +92,37 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
       setError(err?.error ?? "Could not finalise note.");
       return;
     }
+    await refresh();
+  }
+
+  function startAmend(n: Note) {
+    setAmendingId(n.id);
+    setAmendBody(n.body);
+    setAmendDate(n.note_date);
+    setError(null);
+  }
+  function cancelAmend() {
+    setAmendingId(null);
+    setAmendBody("");
+    setAmendDate("");
+  }
+  async function submitAmend() {
+    if (!amendingId || !amendBody.trim()) return;
+    setAmendBusy(true);
+    setError(null);
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${amendingId}/amend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ note_date: amendDate, body: amendBody }),
+    });
+    setAmendBusy(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.message ?? err?.error ?? "Could not amend note.");
+      return;
+    }
+    cancelAmend();
     await refresh();
   }
 
@@ -101,25 +154,77 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
           <p className="text-text-secondary text-sm">Loading notes…</p>
         ) : notes.length === 0 ? (
           <p className="text-text-secondary text-sm">No notes yet.</p>
-        ) : notes.map((n) => (
-          <div key={n.id} className="card">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm">
-                <span className="font-mono">{n.note_date}</span>
-                {n.is_finalised ? (
-                  <span className="ml-2 px-2 py-0.5 rounded bg-state-success/20 text-state-success text-xs">Finalised</span>
-                ) : (
-                  <span className="ml-2 px-2 py-0.5 rounded bg-state-warning/20 text-state-warning text-xs">Draft</span>
-                )}
-                {n.amended_from_note_id ? <span className="ml-2 text-xs text-text-secondary">(amended)</span> : null}
+        ) : notes.map((n) => {
+          const isSuperseded = supersededIds.has(n.id);
+          const supersedes = n.amended_from_note_id ? byId.get(n.amended_from_note_id) : null;
+          const editing = amendingId === n.id;
+          return (
+            <div key={n.id} className={`card${isSuperseded ? " opacity-70" : ""}`}>
+              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                <div className="text-sm">
+                  <span className="font-mono">{n.note_date}</span>
+                  {n.is_finalised ? (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-state-success/20 text-state-success text-xs">Finalised</span>
+                  ) : (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-state-warning/20 text-state-warning text-xs">Unfinalised</span>
+                  )}
+                  {isSuperseded ? (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-text-secondary/20 text-text-secondary text-xs">Superseded</span>
+                  ) : null}
+                  {supersedes ? (
+                    <span className="ml-2 text-xs text-text-secondary">
+                      Supersedes <span className="font-mono">{supersedes.note_date}</span>
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex gap-2">
+                  {!n.is_finalised && !editing && (
+                    <button className="btn-secondary text-xs" onClick={() => onFinalise(n.id)}>Finalise</button>
+                  )}
+                  {!isSuperseded && !editing && (
+                    <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
+                  )}
+                </div>
               </div>
-              {!n.is_finalised && (
-                <button className="btn-secondary text-xs" onClick={() => onFinalise(n.id)}>Finalise</button>
+
+              {editing ? (
+                <div className="space-y-2">
+                  <div>
+                    <label className="label">Date</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={amendDate}
+                      onChange={(e) => setAmendDate(e.target.value)}
+                    />
+                  </div>
+                  <textarea
+                    className="input font-mono"
+                    rows={6}
+                    value={amendBody}
+                    onChange={(e) => setAmendBody(e.target.value)}
+                  />
+                  <p className="text-xs text-text-secondary">
+                    Saving creates a new note that supersedes this one. The original is preserved
+                    and locked.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn-primary text-xs"
+                      disabled={amendBusy || !amendBody.trim()}
+                      onClick={submitAmend}
+                    >
+                      {amendBusy ? "Saving…" : "Save amendment"}
+                    </button>
+                    <button className="btn-secondary text-xs" onClick={cancelAmend}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre>
               )}
             </div>
-            <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
