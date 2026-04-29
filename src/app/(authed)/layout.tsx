@@ -38,7 +38,9 @@ export default async function AuthedLayout({ children }: { children: React.React
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/dashboard" className="hover:text-accent-teal">Dashboard</Link>
-            <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
+            {session.role === "doctor" || session.role === "staff" ? (
+              <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
+            ) : null}
             {session.role === "admin" ? (
               <>
                 <Link href="/admin/users" className="hover:text-accent-teal">Users</Link>
