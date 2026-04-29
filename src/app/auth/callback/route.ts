@@ -11,6 +11,7 @@
 // never gets a session cookie and the (authed) layout bounces back to /login.
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   // caller didn't pass an explicit ?next. Magic links default to /dashboard.
   const type = url.searchParams.get("type");
   const fallback = type === "recovery" ? "/reset-password" : "/dashboard";
-  const next = url.searchParams.get("next") ?? fallback;
+  const next = safeRedirectPath(url.searchParams.get("next"), fallback);
 
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=missing_code", req.url));

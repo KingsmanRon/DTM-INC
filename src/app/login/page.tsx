@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 
 // Next 15 static-prerenders this route by default. useSearchParams() is a
 // client-only hook that has no value at prerender time, so the caller must
@@ -22,7 +23,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") ?? "/dashboard";
+  const next = safeRedirectPath(params.get("next"), "/dashboard");
   const debugAuth = params.get("debug_auth") === "1";
   // The /auth/callback route redirects here with ?error=<message> when PKCE
   // code exchange fails (bad/expired link, replay, missing code). Surface it
@@ -41,7 +42,7 @@ function LoginForm() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     const hasSession = Boolean(data.session);
     const hasUser = Boolean(data.user);
-    const safeNextRoute = next.startsWith("/") ? next : "/dashboard";
+    const safeNextRoute = next;
 
     if (debugAuth) {
       console.info("[auth-login]", {
