@@ -138,8 +138,10 @@ See [`.env.example`](./.env.example). Production must never include a `.env` fil
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client auth key (RLS still enforces) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only; bypasses RLS — use sparingly |
 | `SUPABASE_AUDIT_DB_URL` | Optional dedicated `audit_writer` connection |
-| `CLINICAL_NOTES_KEK_ID` | Reference to the KEK in Vault / KMS |
-| `CLINICAL_NOTES_KEK_DEV_KEY` | Base64 32-byte dev fallback — NEVER set in prod |
+| `CLINICAL_NOTES_KEK_ID` | Reference to the KEK in Vault / KMS (e.g. `vault:clinical-notes-kek/v1`) |
+| `CLINICAL_NOTES_KEY_PROVIDER` | `vault` (recommended) or `dev` |
+| `ALLOW_DEV_KEK_FALLBACK` | `true`/`false` fallback to dev key if Vault read fails |
+| `CLINICAL_NOTES_KEK_DEV_KEY` | Base64 32-byte emergency fallback key |
 
 ---
 
@@ -151,6 +153,9 @@ See [`.env.example`](./.env.example). Production must never include a `.env` fil
 - **Signed DPAs** with Supabase, Vercel, Railway covering POPIA s.72 (§6.2).
 
 Operational runbooks (restore drill, break-glass, breach-notification) belong in a private ops repo.
+
+- CI release gate: `.github/workflows/release-gate.yml` runs `npm ci`, lint, typecheck, test, and build on PRs/pushes.
+- Go-live owner checklist: `docs/internal/go-live-owner-checklist.md` tracks required Engineering/Ops/Clinical sign-offs before DNS cutover.
 
 ---
 
