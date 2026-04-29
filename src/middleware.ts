@@ -29,7 +29,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 const PUBLIC_PATHS = new Set<string>([
-  "/", "/login", "/forgot-password", "/reset-password", "/privacy", "/health",
+  "/", "/login", "/forgot-password", "/reset-password", "/privacy", "/health", "/unauthorised",
 ]);
 
 function isPublic(pathname: string): boolean {
@@ -43,10 +43,18 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: { headers: req.headers } });
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseKey) {
+    throw new Error("Missing Supabase browser key: set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseKey,
     {
       cookies: {
         getAll() {
@@ -62,9 +70,20 @@ export async function middleware(req: NextRequest) {
   );
 
   // Refresh the session if expired. Swallow errors — authorisation happens later.
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   const { pathname } = req.nextUrl;
+  if (process.env.AUTH_DEBUG === "true") {
+    console.info("[auth-guard]", {
+      pathname,
+      isPublic: isPublic(pathname),
+      isProtected: !isPublic(pathname),
+      hasUser: Boolean(user),
+      userId: user?.id ?? null,
+      authError: authError?.message ?? null,
+      guardSource: "middleware",
+    });
+  }
   if (isPublic(pathname)) return res;
 
   if (!user) {
