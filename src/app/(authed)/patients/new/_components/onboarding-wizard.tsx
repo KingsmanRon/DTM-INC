@@ -413,7 +413,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   E
                 </div>
                 <div className="flex-1 space-y-3">
-                  <h3 className="text-lg font-semibold">Full declaration text</h3>
+                  <h3 className="text-lg font-semibold">Declaration Confirmation</h3>
                   <div className="text-sm whitespace-pre-wrap text-text-secondary leading-7">
                     {props.consentBody || "(No consent text configured. Admin must populate practice_settings.active_consent_body before onboarding.)"}
                   </div>
