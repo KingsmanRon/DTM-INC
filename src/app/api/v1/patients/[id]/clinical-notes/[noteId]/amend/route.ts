@@ -69,7 +69,7 @@ export async function POST(
     try {
       const wrapped = byteaToCryptoBuffer(keyRow.wrapped_dek);
       try {
-        dek = unwrapDek(wrapped);
+        dek = await unwrapDek(wrapped);
       } catch (e) {
         if (e instanceof KeyManagementUnavailableError) {
           return jsonError(503, "notes_unavailable", "Clinical notes encryption is not configured.");
