@@ -27,19 +27,27 @@ export default async function AuthedLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-border-subtle bg-surface-elevated">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3 sm:gap-6">
-          <Link href="/dashboard" className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex items-center justify-between gap-3">
+            <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
             <Image
               src="/brand/logo.png"
               alt="DTM INC. logo"
               width={40}
               height={40}
               priority
-              className="h-10 w-10 object-contain"
+              className="h-10 w-10 rounded-md object-contain"
             />
-            <span className="font-semibold">{practiceName}</span>
-          </Link>
-          <nav className="order-3 w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:order-none sm:w-auto">
+              <span className="truncate font-semibold">{practiceName}</span>
+            </Link>
+            <div className="flex items-center gap-2 text-sm text-text-secondary sm:hidden">
+              <span className="max-w-[9rem] truncate">{session.fullName}</span>
+              <span className="px-2 py-0.5 text-xs rounded bg-bg-primary border border-border-subtle uppercase tracking-wide">
+                {session.role}
+              </span>
+            </div>
+          </div>
+          <nav className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:w-auto">
             <Link href="/dashboard" className="hover:text-accent-teal">Dashboard</Link>
             {session.role === "doctor" || session.role === "staff" ? (
               <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
@@ -52,11 +60,14 @@ export default async function AuthedLayout({ children }: { children: React.React
               </>
             ) : null}
           </nav>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm text-text-secondary">
+          <div className="hidden sm:ml-auto sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2 sm:text-sm sm:text-text-secondary">
             <span>{session.fullName}</span>
             <span className="px-2 py-0.5 text-xs rounded bg-bg-primary border border-border-subtle uppercase tracking-wide">
               {session.role}
             </span>
+            <LogoutButton />
+          </div>
+          <div className="flex justify-end sm:hidden">
             <LogoutButton />
           </div>
         </div>
