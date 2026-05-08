@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (keyRow && notes && notes.length > 0) {
       const wrapped = byteaToCryptoBuffer(keyRow.wrapped_dek);
-      const dek = unwrapDek(wrapped);
+      const dek = await unwrapDek(wrapped);
       try {
         for (const n of notes) {
           const ct = byteaToCryptoBuffer(n.encrypted_body);
