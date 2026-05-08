@@ -378,7 +378,7 @@ create table practice_settings (
   practice_tagline        text not null default 'Specialist Laparoscopic and General Surgeon',
   practice_number         text not null default '1144286',
   doctor_name             text not null default 'Dr. Thomas Mtshali',
-  doctor_qualifications   text not null default 'MBBCh, BSc (Lab Med) (WITS), FCS (SA), MMed (Sx2)',
+  doctor_qualifications   text not null default 'MBBCh, BSc (Lab Med) (WITS), FCS (SA), MMed (SMU)',
   practice_address        text not null default 'Clinix Naledi-Nkanyezi Private Hospital, 1 Moshoeshoe Street, Sebokeng 1982',
   practice_phone          text not null default '016 420-3160',
   logo_path               text,
