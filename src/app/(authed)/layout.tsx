@@ -36,7 +36,7 @@ export default async function AuthedLayout({ children }: { children: React.React
               width={40}
               height={40}
               priority
-              className="h-10 w-10 rounded-md object-contain"
+              className="h-10 w-10 rounded-full object-contain"
             />
               <span className="truncate font-semibold">{practiceName}</span>
             </Link>

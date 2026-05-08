@@ -108,7 +108,7 @@ export default function MfaEnrolPage() {
 
         {secret ? (
           <p className="text-xs text-text-secondary">
-            Can't scan? Enter this secret manually: <span className="font-mono">{secret}</span>
+            Can&apos;t scan? Enter this secret manually: <span className="font-mono">{secret}</span>
           </p>
         ) : null}
 
