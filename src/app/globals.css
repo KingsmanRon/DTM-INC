@@ -17,11 +17,11 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image: url("/brand/logo.png");
+  background-image: url("/brand/Dr. T. Mtshali_LOGO - PDF.png");
   background-repeat: no-repeat;
   background-position: center;
   background-size: min(80vw, 900px);
-  opacity: 0.06;
+  opacity: 0.048;
   pointer-events: none;
   z-index: 0;
 }
