@@ -23,14 +23,14 @@ const styles = StyleSheet.create({
   page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.4, color: "#111" },
 
   header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 6 },
-  logo: { width: 120, height: 90, objectFit: "contain", marginRight: 14 },
-  headerInfo: { flex: 1, paddingTop: 4 },
+  logo: { width: 140, height: 105, objectFit: "contain", marginRight: 16 },
+  headerInfo: { flex: 1, paddingTop: 4, paddingRight: 14 },
   doctorLine: { fontSize: 10, fontWeight: 700, color: BRAND_DARK },
   practiceMeta: { fontSize: 9, color: MUTED, marginTop: 2 },
 
-  fileBox: { borderWidth: 1, borderColor: BRAND_DARK, padding: 8, minWidth: 170, alignItems: "center", marginTop: 4 },
+  fileBox: { borderWidth: 1, borderColor: BRAND_DARK, padding: 6, width: 130, alignItems: "center", marginTop: 4 },
   fileLabel: { fontSize: 7, color: BRAND_DARK, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 },
-  fileNo: { fontSize: 13, fontWeight: 700, fontFamily: "Courier", marginTop: 2 },
+  fileNo: { fontSize: 11, fontWeight: 700, fontFamily: "Courier", marginTop: 2 },
 
   rule: { borderBottomWidth: 2, borderBottomColor: BRAND_DARK, marginTop: 8, marginBottom: 4 },
   ruleThin: { borderBottomWidth: 0.5, borderBottomColor: BRAND_ACCENT, marginBottom: 12 },
