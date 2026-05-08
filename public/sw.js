@@ -15,7 +15,7 @@
 const CACHE = "dtm-shell-v2";
 const SHELL_URLS = [
   "/manifest.webmanifest",
-  "/icons/favicon.svg",
+  "/icons/favicon.ico",
 ];
 
 self.addEventListener("install", (event) => {
