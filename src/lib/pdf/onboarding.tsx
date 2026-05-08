@@ -2,24 +2,57 @@
 // Uses @react-pdf/renderer. Layout mirrors the paper carbon form, so
 // reception can hand the PDF to the third-party claims processor
 // (§14 rule 10 — no integration; manual delivery).
-import { Document, Page, Text, View, StyleSheet, Font, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet, Font, renderToBuffer } from "@react-pdf/renderer";
+import fs from "node:fs";
+import path from "node:path";
 import React from "react";
 
+// Branded letterhead logo. The PNG already contains the practice name and
+// "SPECIALIST LAPAROSCOPIC AND GENERAL SURGEON" tagline, so the header
+// avoids duplicating that text in the layout below.
+const LOGO_BUFFER = fs.readFileSync(
+  path.join(process.cwd(), "public", "brand", "Dr. T. Mtshali_LOGO - PDF.png"),
+);
+
+const BRAND_DARK = "#1d4d3a";
+const BRAND_ACCENT = "#2d7d5e";
+const RULE = "#cbd5e1";
+const MUTED = "#4b5563";
+
 const styles = StyleSheet.create({
-  page: { padding: 32, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.4 },
-  header: { flexDirection: "row", borderBottom: "1 solid #000", paddingBottom: 8, marginBottom: 12 },
-  practiceName: { fontSize: 14, fontWeight: 700 },
-  practiceTag: { fontSize: 9, color: "#444" },
-  practiceMeta: { fontSize: 8, color: "#444", marginTop: 2 },
-  fileBox: { border: "1 solid #000", padding: 6, minWidth: 180, alignItems: "center" },
-  fileLabel: { fontSize: 7, color: "#444" },
-  fileNo: { fontSize: 13, fontWeight: 700, fontFamily: "Courier" },
-  sectionTitle: { fontSize: 11, fontWeight: 700, backgroundColor: "#eee", padding: 4, marginTop: 10, marginBottom: 4 },
+  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.4, color: "#111" },
+
+  header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 6 },
+  logo: { width: 120, height: 90, objectFit: "contain", marginRight: 14 },
+  headerInfo: { flex: 1, paddingTop: 4 },
+  doctorLine: { fontSize: 10, fontWeight: 700, color: BRAND_DARK },
+  practiceMeta: { fontSize: 9, color: MUTED, marginTop: 2 },
+
+  fileBox: { borderWidth: 1, borderColor: BRAND_DARK, padding: 8, minWidth: 170, alignItems: "center", marginTop: 4 },
+  fileLabel: { fontSize: 7, color: BRAND_DARK, letterSpacing: 1, textTransform: "uppercase", fontWeight: 700 },
+  fileNo: { fontSize: 13, fontWeight: 700, fontFamily: "Courier", marginTop: 2 },
+
+  rule: { borderBottomWidth: 2, borderBottomColor: BRAND_DARK, marginTop: 8, marginBottom: 4 },
+  ruleThin: { borderBottomWidth: 0.5, borderBottomColor: BRAND_ACCENT, marginBottom: 12 },
+
+  sectionTitle: {
+    fontSize: 10, fontWeight: 700, color: "#fff", backgroundColor: BRAND_DARK,
+    paddingVertical: 4, paddingHorizontal: 6, marginTop: 12, marginBottom: 6,
+    letterSpacing: 0.6, textTransform: "uppercase",
+  },
+
   row: { flexDirection: "row", marginBottom: 2 },
-  label: { width: 140, color: "#333" },
+  label: { width: 140, color: MUTED },
   value: { flex: 1, fontWeight: 700 },
-  consentBox: { border: "1 solid #000", padding: 8, marginTop: 8 },
-  consentMeta: { fontSize: 8, color: "#444", marginTop: 4 },
+
+  consentBox: { borderWidth: 1, borderColor: RULE, borderLeftWidth: 3, borderLeftColor: BRAND_ACCENT, padding: 8, marginTop: 6 },
+  consentMeta: { fontSize: 8, color: MUTED, marginTop: 4 },
+
+  footer: {
+    position: "absolute", left: 36, right: 36, bottom: 18,
+    flexDirection: "row", justifyContent: "space-between",
+    fontSize: 8, color: MUTED, borderTopWidth: 0.5, borderTopColor: RULE, paddingTop: 6,
+  },
 });
 
 export type OnboardingPdfInput = {
@@ -57,19 +90,21 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.practiceName}>{practice.name}</Text>
-            <Text style={styles.practiceTag}>{practice.tagline}</Text>
-            <Text style={styles.practiceMeta}>{practice.doctorName} — {practice.qualifications}</Text>
+        <View style={styles.header} fixed>
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image, not an HTML img */}
+          <Image src={{ data: LOGO_BUFFER, format: "png" }} style={styles.logo} />
+          <View style={styles.headerInfo}>
+            <Text style={styles.doctorLine}>{practice.doctorName} — {practice.qualifications}</Text>
             <Text style={styles.practiceMeta}>{practice.address}</Text>
-            <Text style={styles.practiceMeta}>Tel: {practice.phone}   PR. No. {practice.practiceNumber}</Text>
+            <Text style={styles.practiceMeta}>Tel: {practice.phone}    PR. No. {practice.practiceNumber}</Text>
           </View>
           <View style={styles.fileBox}>
-            <Text style={styles.fileLabel}>FILE / COMPUTER NO.</Text>
+            <Text style={styles.fileLabel}>File / Computer No.</Text>
             <Text style={styles.fileNo}>{fileNumber}</Text>
           </View>
         </View>
+        <View style={styles.rule} fixed />
+        <View style={styles.ruleThin} fixed />
 
         <Text style={styles.sectionTitle}>A · Patient details</Text>
         <Row label="Title" value={patient.title} />
@@ -133,7 +168,7 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
         {dependants.length === 0 ? <Text>None</Text> : dependants.map((d, i) => (
           <View key={i} style={{ marginBottom: 3 }}>
             <Text>{d.name} · {d.sex} · DOB {d.date_of_birth} · Code {d.dependant_code}</Text>
-            {d.allergies ? <Text style={{ fontSize: 8, color: "#444" }}>Allergies: {d.allergies}</Text> : null}
+            {d.allergies ? <Text style={{ fontSize: 8, color: MUTED }}>Allergies: {d.allergies}</Text> : null}
           </View>
         ))}
 
@@ -147,6 +182,11 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
               <Text style={styles.consentMeta}>Signature type: {consent.signatureType}</Text>
             </>
           ) : <Text>No consent on record</Text>}
+        </View>
+
+        <View style={styles.footer} fixed>
+          <Text>{practice.name} · POPIA-protected · File {fileNumber}</Text>
+          <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>
     </Document>
