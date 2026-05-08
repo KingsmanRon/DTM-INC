@@ -13,6 +13,24 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("/brand/logo.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(80vw, 900px);
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Focus ring — Inntris teal, never removed. */
 :focus-visible {
   outline: 2px solid #00D4B8;
