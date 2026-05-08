@@ -12,14 +12,16 @@ export default function DashboardPage() {
         <PatientSearch />
       </section>
 
-      <section className="card flex items-center justify-between">
+      <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="section-title">Onboard a new patient</h2>
           <p className="text-text-secondary text-sm">
             Digital equivalent of the paper onboarding form. Generates a unique file number on submit.
           </p>
         </div>
-        <Link href="/patients/new" className="btn-primary">New patient</Link>
+                <Link href="/patients/new" className="btn-primary w-full text-center sm:w-auto">
+          New patient
+        </Link>
       </section>
     </div>
   );
