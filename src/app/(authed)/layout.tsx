@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { resolveSession } from "@/lib/auth/session";
 import { resolveMfa } from "@/lib/auth/mfa";
 import { getSupabaseServer } from "@/lib/supabase/server";
@@ -28,10 +29,17 @@ export default async function AuthedLayout({ children }: { children: React.React
       <header className="border-b border-border-subtle bg-surface-elevated">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3 sm:gap-6">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <img src="/brand/logo.png" alt="DTM INC. logo" className="h-8 w-8 rounded object-contain" />
+            <Image
+              src="/brand/logo.png"
+              alt="DTM INC. logo"
+              width={40}
+              height={40}
+              priority
+              className="h-10 w-10 object-contain"
+            />
             <span className="font-semibold">{practiceName}</span>
           </Link>
-                    <nav className="order-3 w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:order-none sm:w-auto">
+          <nav className="order-3 w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:order-none sm:w-auto">
             <Link href="/dashboard" className="hover:text-accent-teal">Dashboard</Link>
             {session.role === "doctor" || session.role === "staff" ? (
               <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
@@ -44,7 +52,7 @@ export default async function AuthedLayout({ children }: { children: React.React
               </>
             ) : null}
           </nav>
-                    <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm text-text-secondary">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm text-text-secondary">
             <span>{session.fullName}</span>
             <span className="px-2 py-0.5 text-xs rounded bg-bg-primary border border-border-subtle uppercase tracking-wide">
               {session.role}
