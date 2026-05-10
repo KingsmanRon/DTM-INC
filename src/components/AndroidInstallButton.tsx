@@ -1,26 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { detectInstallHelpPlatform, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
 
-// Chrome stashes the install prompt on a beforeinstallprompt event. We capture
-// it, prevent Chrome's own banner, and expose a button that calls .prompt()
-// from a user gesture. The button hides itself when the app is already
-// installed (display-mode: standalone) or the prompt was never offered (e.g.
-// site doesn't meet installability criteria, user already installed elsewhere,
-// running on a browser without install support).
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+  userChoice?: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
 export function AndroidInstallButton() {
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
+  const shownTracked = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) {
+    if (isStandaloneMode()) {
       setInstalled(true);
       return;
     }
@@ -28,33 +24,65 @@ export function AndroidInstallButton() {
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
       setPromptEvent(e as BeforeInstallPromptEvent);
+      shownTracked.current = false;
+      trackPwaInstallEvent("pwa_android_beforeinstallprompt_fired", { platform: "android", source: "android_button" });
     };
+
     const onInstalled = () => {
       setInstalled(true);
       setPromptEvent(null);
+      trackPwaInstallEvent("pwa_android_appinstalled", { platform: detectInstallHelpPlatform(), source: "android_button" });
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
+
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
+  useEffect(() => {
+    if (!installed && promptEvent && !shownTracked.current) {
+      shownTracked.current = true;
+      trackPwaInstallEvent("pwa_android_install_button_shown", { platform: "android", source: "android_button" });
+    }
+  }, [installed, promptEvent]);
+
   const onClick = useCallback(async () => {
     if (!promptEvent) return;
-    await promptEvent.prompt();
-    // The event can only be used once; drop the reference either way.
+
+    trackPwaInstallEvent("pwa_android_install_button_clicked", { platform: "android", source: "android_button" });
+    const currentPrompt = promptEvent;
     setPromptEvent(null);
+
+    await currentPrompt.prompt();
+
+    const choice = await currentPrompt.userChoice;
+    if (choice?.outcome === "accepted") {
+      trackPwaInstallEvent("pwa_android_install_prompt_accepted", {
+        platform: "android",
+        source: "android_button",
+        outcome: "accepted",
+      });
+      return;
+    }
+
+    trackPwaInstallEvent("pwa_android_install_prompt_dismissed", {
+      platform: "android",
+      source: "android_button",
+      outcome: "dismissed",
+    });
   }, [promptEvent]);
 
-  if (installed || !promptEvent) return null;
+  if (installed || !promptEvent || isStandaloneMode()) return null;
 
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label="Install DTM Inc."
       style={{
         position: "fixed",
         right: 12,
@@ -71,7 +99,7 @@ export function AndroidInstallButton() {
         boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
       }}
     >
-      Install app
+      Install DTM
     </button>
   );
 }
