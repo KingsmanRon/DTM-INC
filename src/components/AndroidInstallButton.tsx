@@ -71,7 +71,7 @@ export function AndroidInstallButton() {
         boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
       }}
     >
-      Install app
+      Install DTM Inc.
     </button>
   );
 }
