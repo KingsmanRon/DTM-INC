@@ -5,6 +5,7 @@ import { resolveSession } from "@/lib/auth/session";
 import { resolveMfa } from "@/lib/auth/mfa";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { LogoutButton } from "./_components/logout-button";
+import { InstallHelpLink } from "@/components/InstallHelpLink";
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const session = await resolveSession();
@@ -78,7 +79,10 @@ export default async function AuthedLayout({ children }: { children: React.React
       <footer className="border-t border-border-subtle text-xs text-text-secondary">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-4 justify-between">
           <span>POPIA-protected · Information Officer: {settings?.information_officer_name ?? "Dr. Thomas Mtshali"}</span>
-          <Link href="/privacy" className="hover:text-accent-teal">Privacy notice</Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link href="/privacy" className="hover:text-accent-teal">Privacy notice</Link>
+            <InstallHelpLink />
+          </div>
         </div>
       </footer>
     </div>

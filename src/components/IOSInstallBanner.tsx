@@ -1,75 +1,71 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { detectInstallHelpPlatform, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
 
-// Brand-namespaced key so we don't collide with other apps on the same domain
-// during local dev or if this is ever served alongside another product.
-const DISMISS_KEY = "dtm-ios-install-dismissed";
+const DISMISS_KEY = "dtm-ios-install-dismissal";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-type NavigatorWithStandalone = Navigator & { standalone?: boolean };
+type DismissState = { count: number; dismissedAt: number };
 
-function isIosSafari(): boolean {
+function shouldShowBanner(): boolean {
   if (typeof window === "undefined") return false;
-  const ua = window.navigator.userAgent;
+  if (isStandaloneMode()) return false;
 
-  // iPhone / iPod / older iPad UAs.
-  const isIPhoneFamily = /iPad|iPhone|iPod/.test(ua);
+  const platform = detectInstallHelpPlatform();
+  if (platform !== "ios" && platform !== "ipados") return false;
 
-  // iPadOS 13+ reports a desktop-Safari UA. Detect via touch + Mac UA.
-  // Patient demographic may use iPad in clinic, so include it.
-  const isIPadOs13Plus =
-    ua.includes("Mac") && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1;
-
-  if (!isIPhoneFamily && !isIPadOs13Plus) return false;
-
-  // In-app browsers and non-Safari iOS browsers cannot Add to Home Screen.
-  // Filter Chrome iOS, Firefox iOS, Edge iOS, Opera iOS, and the Facebook /
-  // Instagram in-app webviews.
-  if (/CriOS|FxiOS|EdgiOS|OPiOS|FBAN|FBAV|Instagram/.test(ua)) return false;
-
-  // Must literally be Safari (in-app WKWebViews omit "Safari").
-  if (!/Safari/.test(ua)) return false;
-
-  return true;
+  try {
+    const raw = window.localStorage.getItem(DISMISS_KEY);
+    if (!raw) return true;
+    const parsed = JSON.parse(raw) as DismissState;
+    if (typeof parsed?.count !== "number" || typeof parsed?.dismissedAt !== "number") return true;
+    if (parsed.count >= 3) return false;
+    const snoozeMs = parsed.count === 1 ? 7 * DAY_MS : 30 * DAY_MS;
+    return Date.now() - parsed.dismissedAt >= snoozeMs;
+  } catch {
+    return true;
+  }
 }
 
 export function IOSInstallBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!isIosSafari()) return;
-
-    // Already installed — Safari sets navigator.standalone=true for home-screen launches.
-    const nav = window.navigator as NavigatorWithStandalone;
-    if (nav.standalone === true) return;
-
-    // Dismissal is persisted across sessions. Guarded because some
-    // privacy modes throw on localStorage access.
-    try {
-      if (window.localStorage.getItem(DISMISS_KEY) === "1") return;
-    } catch {
-      // If storage is unavailable we still show the banner; dismissing
-      // it just won't persist, which is acceptable.
-    }
-
+    if (!shouldShowBanner()) return;
     setVisible(true);
+    trackPwaInstallEvent("pwa_ios_banner_shown", { platform: detectInstallHelpPlatform(), source: "ios_banner" });
   }, []);
 
   if (!visible) return null;
 
   const dismiss = () => {
     setVisible(false);
+
     try {
-      window.localStorage.setItem(DISMISS_KEY, "1");
+      const raw = window.localStorage.getItem(DISMISS_KEY);
+      const current = raw ? (JSON.parse(raw) as DismissState) : { count: 0, dismissedAt: 0 };
+      const count = typeof current.count === "number" ? Math.max(0, current.count) + 1 : 1;
+      const next: DismissState = {
+        count: Math.min(3, count),
+        dismissedAt: Date.now(),
+      };
+      window.localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
     } catch {
       // Best effort.
     }
+
+    trackPwaInstallEvent("pwa_ios_banner_dismissed", {
+      platform: detectInstallHelpPlatform(),
+      source: "ios_banner",
+      outcome: "dismissed",
+    });
   };
 
   return (
-    <div
-      role="dialog"
-      aria-label="Install DTM Inc. on your home screen"
+    <aside
+      role="region"
+      aria-label="Install instructions"
       style={{
         position: "fixed",
         left: 12,
@@ -91,11 +87,9 @@ export function IOSInstallBanner() {
       }}
     >
       <div style={{ flex: 1 }}>
-        <strong style={{ display: "block", marginBottom: 4 }}>Install DTM Inc.</strong>
+        <strong style={{ display: "block", marginBottom: 4 }}>Add DTM to your Home Screen</strong>
         <span>
-          Tap{" "}
-          <ShareIcon />{" "}
-          then <em>Add to Home Screen</em> to install this app on your iPhone.
+          Tap the Share button, then choose Add to Home Screen. This lets you open DTM like an app.
         </span>
       </div>
       <button
@@ -106,35 +100,14 @@ export function IOSInstallBanner() {
           background: "transparent",
           border: "none",
           color: "#9CA3AF",
-          fontSize: 20,
+          fontSize: 14,
           lineHeight: 1,
           cursor: "pointer",
           padding: 4,
         }}
       >
-        ×
+        Dismiss
       </button>
-    </div>
-  );
-}
-
-function ShareIcon() {
-  return (
-    <svg
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      style={{ verticalAlign: "-3px", display: "inline-block" }}
-    >
-      <path d="M12 16V4" />
-      <path d="M7 9l5-5 5 5" />
-      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
-    </svg>
+    </aside>
   );
 }
