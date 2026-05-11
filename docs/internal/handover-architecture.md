@@ -1,4 +1,4 @@
-# DTM PWA Handover Architecture (2026-05-07)
+# DTM PWA Handover Architecture 
 
 ## 1) System architecture overview
 DTM is a Next.js 15 App Router PWA deployed on Vercel, backed by Supabase (Postgres/Auth/Storage), with POPIA-aligned role-based access and an append-only hash-chained audit trail.
