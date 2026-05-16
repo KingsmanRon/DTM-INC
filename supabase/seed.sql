@@ -39,7 +39,7 @@ your information for marketing.
 For any request relating to your personal information, contact our
 Information Officer below.
 $BODY$,
-  information_officer_email = 'io@dtminc.co.za',  -- TODO: replace with real mailbox
+  information_officer_email = 'drmtshalitm@gmail.com',
   updated_at = now()
 where id = 1;
 

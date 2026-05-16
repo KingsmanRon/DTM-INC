@@ -139,7 +139,7 @@ function LoginShell(props: {
 
         <p className="text-text-secondary text-xs pt-4 border-t border-border-subtle">
           This is a POPIA-protected system. All access is logged.
-          Information Officer: Dr. Thomas Mtshali (registered with the SA Information Regulator).
+          Information Officer: Dr. Thomas Mtshali.
         </p>
       </form>
     </main>
