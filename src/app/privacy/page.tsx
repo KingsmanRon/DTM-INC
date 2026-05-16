@@ -11,11 +11,6 @@ export default async function PrivacyPage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-10 space-y-4">
       <h1 className="text-2xl font-semibold">Privacy notice</h1>
-      <p className="text-text-secondary text-sm">
-        {data?.practice_name ?? "Dr. Thomas Mtshali Inc."} processes health information in accordance with the Protection of Personal
-        Information Act, 2013 (POPIA). Health information is treated as <em>special personal information</em>
-        under POPIA sections 26–27.
-      </p>
 
       <section className="card text-sm whitespace-pre-wrap">
         {data?.privacy_notice_body || "(Privacy notice body not yet configured. Admin: populate practice_settings.privacy_notice_body.)"}
