@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 const PatientPatch = z.object({
+  hospital: z.string().optional(),
   title: TitleEnum.optional(),
   first_names: z.string().min(1).optional(),
   surname: z.string().min(1).optional(),

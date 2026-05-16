@@ -107,6 +107,7 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
         <View style={styles.ruleThin} fixed />
 
         <Text style={styles.sectionTitle}>A · Patient details</Text>
+        <Row label="Hospital" value={patient.hospital} />
         <Row label="Title" value={patient.title} />
         <Row label="First names" value={patient.first_names} />
         <Row label="Surname" value={patient.surname} />

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 
 type Draft = {
-  section_a: { title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "other"; id_number: string; id_country?: string; email: string; phone: string; address: string };
+  section_a: { hospital: "Nkanyezi Private Hospital" | "Fountain Private Hospital" | "Mediclinic Vereeniging Hospital" | "Midvaal Private Hospital"; title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "other"; id_number: string; id_country?: string; email: string; phone: string; address: string };
   section_b: { same_as_patient: boolean; title: string; first_names: string; surname: string; id_number: string; date_of_birth: string; marital_status: string; email: string; phone: string; home_address: string; spouse_partner_phone: string; spouse_partner_work_phone: string; employer_name: string; occupation: string; work_address: string; work_phone: string };
   section_c: { same_as_responsible: boolean; main_member_name: string; medical_aid_name: string; membership_number: string; plan: string; other_plan_detail: string; is_private_payer: boolean };
   section_d: { name: string; relationship: string; address: string; email: string; phone: string };
@@ -15,7 +15,7 @@ type Draft = {
 };
 
 const emptyDraft: Draft = {
-  section_a: { title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
+  section_a: { hospital: "Nkanyezi Private Hospital", title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
   section_b: { same_as_patient: false, title: "Mr", first_names: "", surname: "", id_number: "", date_of_birth: "", marital_status: "single", email: "", phone: "+27", home_address: "", spouse_partner_phone: "", spouse_partner_work_phone: "", employer_name: "", occupation: "", work_address: "", work_phone: "" },
   section_c: { same_as_responsible: true, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
@@ -175,6 +175,14 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           <>
             <h2 className="section-title">A — Patient details</h2>
             <div className="grid grid-cols-2 gap-4">
+                            <Field label="Hospital" required>
+                <select className="input" value={A.hospital} onChange={(e) => setDraft({ ...draft, section_a: { ...A, hospital: e.target.value as Draft["section_a"]["hospital"] } })}>
+                  <option value="Nkanyezi Private Hospital">Nkanyezi Private Hospital</option>
+                  <option value="Fountain Private Hospital">Fountain Private Hospital</option>
+                  <option value="Mediclinic Vereeniging Hospital">Mediclinic Vereeniging Hospital</option>
+                  <option value="Midvaal Private Hospital">Midvaal Private Hospital</option>
+                </select>
+              </Field>
               <Field label="Title">
                 <select className="input" value={A.title} onChange={(e) => setDraft({ ...draft, section_a: { ...A, title: e.target.value } })}>
                   {["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"].map((t) => <option key={t}>{t}</option>)}

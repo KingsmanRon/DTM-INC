@@ -32,6 +32,7 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-4">
       <Block title="Patient">
+        <KV k="Hospital" v={data.patient.hospital} />
         <KV k="Title" v={data.patient.title} />
         <KV k="Full name" v={`${data.patient.first_names} ${data.patient.surname}`} />
         <KV k="ID" v={data.patient.id_number} />

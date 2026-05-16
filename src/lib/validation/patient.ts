@@ -26,7 +26,10 @@ export const IdNumberSchema = z.object({
 });
 
 // Section A — Patient details
+export const HospitalEnum = z.enum(["Nkanyezi Private Hospital", "Fountain Private Hospital", "Mediclinic Vereeniging Hospital", "Midvaal Private Hospital"]);
+
 export const SectionA = z.object({
+  hospital: HospitalEnum,
   title: TitleEnum,
   first_names: z.string().min(1),
   surname: z.string().min(1),
