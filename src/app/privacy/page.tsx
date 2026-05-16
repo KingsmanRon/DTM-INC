@@ -23,9 +23,13 @@ export default async function PrivacyPage() {
 
       <section className="card text-sm space-y-2">
         <h2 className="font-semibold">Information Officer</h2>
-        <p>{data?.information_officer_name ?? "Dr. Thomas Mtshali"} (registered with the SA Information Regulator).</p>
-        {data?.information_officer_email ? <p>Email: {data.information_officer_email}</p> : null}
-        {data?.practice_address ? <p>Address: {data.practice_address}</p> : null}
+        <p>{data?.information_officer_name ?? "Dr. Thomas Mtshali"}</p>
+        <p>Email: {data?.information_officer_email ?? "drmtshalitm@gmail.com"}</p>
+        <p>Cell: 084 340 2177</p>
+        <p>Address 1: {data?.practice_address ?? "Clinix Naledi-Nkanyezi Private Hospital, 1 Moshoeshoe Street, Sebokeng 1982"}</p>
+        <p>Tel: 016 420-3160</p>
+        <p>Address 2: The Fountain Private Hospital, R500 Annan Road, Between Carletonville &amp; Fochville</p>
+        <p>Tel: 018 788-1285 / 1138</p>
       </section>
 
       <section className="card text-sm space-y-2">

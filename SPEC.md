@@ -7,7 +7,7 @@
 **Version:** v1.1 (MVP spec, ready for build — all open questions resolved with practice owner)
 **Document owner:** Inntris / Ronald Maduna
 **Compliance posture:** POPIA-aligned (Health information = special personal information, POPIA s.26–s.27)
-**Information Officer:** Dr. Thomas Mtshali (registered with the SA Information Regulator).
+**Information Officer:** Dr. Thomas Mtshali
 
 > This file is the authoritative product spec this repo builds against. The full text captured here matches the brief handed to the implementing agent at kickoff. When requirements change, update this file first, then the code, then the migrations.
 
