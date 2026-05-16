@@ -32,6 +32,7 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-4">
       <Block title="Patient">
+        <KV k="Hospital" v={hospitalLabel(data.patient.hospital)} />
         <KV k="Title" v={data.patient.title} />
         <KV k="Full name" v={`${data.patient.first_names} ${data.patient.surname}`} />
         <KV k="ID" v={data.patient.id_number} />
@@ -99,6 +100,18 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <div className="space-y-1 text-sm">{children}</div>
     </div>
   );
+}
+
+const HOSPITAL_LABELS: Record<string, string> = {
+  nkanyezi: "Nkanyezi Private Hospital",
+  fountain: "Fountain Private Hospital",
+  mediclinic_vereeniging: "Mediclinic Vereeniging Hospital",
+  midvaal: "Midvaal Private Hospital",
+};
+
+function hospitalLabel(v: string | null | undefined): string | null {
+  if (!v) return null;
+  return HOSPITAL_LABELS[v] ?? v;
 }
 
 function KV({ k, v }: { k: string; v: string | null | undefined }) {

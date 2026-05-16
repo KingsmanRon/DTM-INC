@@ -9,6 +9,7 @@ export const PayerType = z.enum(["medical_aid", "private"]);
 export const IdType = z.enum(["sa_id", "passport", "other"]);
 export const Sex = z.enum(["m", "f", "other"]);
 export const ReferrerType = z.enum(["gp", "specialist", "hospital", "self", "other"]);
+export const HospitalEnum = z.enum(["nkanyezi", "fountain", "mediclinic_vereeniging", "midvaal"]);
 
 const e164 = z.string().regex(/^\+?[0-9 ()-]{7,20}$/, "Invalid phone number");
 const emailOptional = z.string().email().optional().or(z.literal(""));
@@ -27,6 +28,7 @@ export const IdNumberSchema = z.object({
 
 // Section A — Patient details
 export const SectionA = z.object({
+  hospital: HospitalEnum,
   title: TitleEnum,
   first_names: z.string().min(1),
   surname: z.string().min(1),

@@ -75,6 +75,18 @@ export type OnboardingPdfInput = {
   } | null;
 };
 
+const HOSPITAL_LABELS: Record<string, string> = {
+  nkanyezi: "Nkanyezi Private Hospital",
+  fountain: "Fountain Private Hospital",
+  mediclinic_vereeniging: "Mediclinic Vereeniging Hospital",
+  midvaal: "Midvaal Private Hospital",
+};
+
+function hospitalLabel(v: string | null | undefined): string | null {
+  if (!v) return null;
+  return HOSPITAL_LABELS[v] ?? v;
+}
+
 function Row({ label, value }: { label: string; value?: string | null }) {
   return (
     <View style={styles.row}>
@@ -107,6 +119,7 @@ export function OnboardingPdfDoc(input: OnboardingPdfInput) {
         <View style={styles.ruleThin} fixed />
 
         <Text style={styles.sectionTitle}>A · Patient details</Text>
+        <Row label="Hospital" value={hospitalLabel(patient.hospital)} />
         <Row label="Title" value={patient.title} />
         <Row label="First names" value={patient.first_names} />
         <Row label="Surname" value={patient.surname} />

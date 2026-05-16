@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-import { TitleEnum, PayerType } from "@/lib/validation/patient";
+import { TitleEnum, PayerType, HospitalEnum } from "@/lib/validation/patient";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 const PatientPatch = z.object({
+  hospital: HospitalEnum.optional(),
   title: TitleEnum.optional(),
   first_names: z.string().min(1).optional(),
   surname: z.string().min(1).optional(),
