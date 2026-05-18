@@ -248,67 +248,71 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
             <SectionHeading title="Hospital information" />
             <InfoGrid>
               <KV k="Hospital" v={data.patient.hospital} />
-              <KV k="Payer type" v={data.patient.payer_type} />
+              <KV k="Payer type" v={formatTitleCaseValue(data.patient.payer_type)} />
             </InfoGrid>
           </div>
         )}
       </Block>
 
-      {data.responsible && (
-        <Block title="Account-responsible party">
-          <InfoGrid>
-            <KV k="Name" v={`${data.responsible.first_names} ${data.responsible.surname}`} />
-            <KV k="ID" v={data.responsible.id_number} />
-            <KV k="DOB" v={data.responsible.date_of_birth} />
-            <KV k="Phone" v={data.responsible.phone} />
-            <KV k="Employer" v={data.responsible.employer_name} />
-            <KV k="Occupation" v={data.responsible.occupation} />
-          </InfoGrid>
-        </Block>
-      )}
+      {!editMode ? (
+        <>
+          {data.responsible && (
+            <Block title="Account-responsible party">
+              <InfoGrid>
+                <KV k="Name" v={`${data.responsible.first_names} ${data.responsible.surname}`} />
+                <KV k="ID" v={data.responsible.id_number} />
+                <KV k="DOB" v={data.responsible.date_of_birth} />
+                <KV k="Phone" v={data.responsible.phone} />
+                <KV k="Employer" v={data.responsible.employer_name} />
+                <KV k="Occupation" v={data.responsible.occupation} />
+              </InfoGrid>
+            </Block>
+          )}
 
-      {data.medical_aid && (
-        <Block title="Medical aid">
-          <InfoGrid>
-            <KV k="Main member" v={data.medical_aid.main_member_name} />
-            <KV k="Scheme" v={data.medical_aid.medical_aid_name} />
-            <KV k="Membership" v={data.medical_aid.membership_number} />
-            <KV k="Plan" v={data.medical_aid.plan} />
-          </InfoGrid>
-        </Block>
-      )}
+          {data.medical_aid && (
+            <Block title="Medical aid">
+              <InfoGrid>
+                <KV k="Main member" v={data.medical_aid.main_member_name} />
+                <KV k="Scheme" v={data.medical_aid.medical_aid_name} />
+                <KV k="Membership" v={data.medical_aid.membership_number} />
+                <KV k="Plan" v={data.medical_aid.plan} />
+              </InfoGrid>
+            </Block>
+          )}
 
-      {data.contacts[0] && (
-        <Block title="Emergency contact">
-          <InfoGrid>
-            <KV k="Name" v={data.contacts[0].name} />
-            <KV k="Relationship" v={data.contacts[0].relationship} />
-            <KV k="Phone" v={data.contacts[0].phone} />
-          </InfoGrid>
-        </Block>
-      )}
+          {data.contacts[0] && (
+            <Block title="Emergency contact">
+              <InfoGrid>
+                <KV k="Name" v={data.contacts[0].name} />
+                <KV k="Relationship" v={data.contacts[0].relationship} />
+                <KV k="Phone" v={data.contacts[0].phone} />
+              </InfoGrid>
+            </Block>
+          )}
 
-      {data.referral && (
-        <Block title="Referral">
-          <InfoGrid>
-            <KV k="Type" v={data.referral.referrer_type} />
-            <KV k="Name" v={data.referral.referrer_name} />
-            <KV k="Phone" v={data.referral.referrer_phone} />
-          </InfoGrid>
-        </Block>
-      )}
+          {data.referral && (
+            <Block title="Referral">
+              <InfoGrid>
+                <KV k="Type" v={formatReferralType(data.referral.referrer_type)} />
+                <KV k="Name" v={data.referral.referrer_name} />
+                <KV k="Phone" v={data.referral.referrer_phone} />
+              </InfoGrid>
+            </Block>
+          )}
 
-      {data.dependants.length > 0 && (
-        <Block title="Dependants">
-          <ul className="list-disc space-y-1 pl-5">
-            {data.dependants.map((d, i) => (
-              <li key={i}>
-                {d.name || "Not captured"} · {d.sex || "Not captured"} · DOB {d.date_of_birth || "Not captured"} · Code {d.dependant_code || "Not captured"}
-              </li>
-            ))}
-          </ul>
-        </Block>
-      )}
+          {data.dependants.length > 0 && (
+            <Block title="Dependants">
+              <ul className="list-disc space-y-1 pl-5">
+                {data.dependants.map((d, i) => (
+                  <li key={i}>
+                    {d.name || "Not captured"} · {d.sex || "Not captured"} · DOB {d.date_of_birth || "Not captured"} · Code {d.dependant_code || "Not captured"}
+                  </li>
+                ))}
+              </ul>
+            </Block>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -328,6 +332,17 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
       <input className="input bg-white/[0.02] transition-colors focus:bg-white/[0.04]" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
+}
+
+function formatReferralType(v: string | null | undefined): string | null {
+  if (!v) return null;
+  if (v === "gp") return "GP";
+  return v.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function formatTitleCaseValue(v: string | null | undefined): string | null {
+  if (!v) return null;
+  return v.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function Block({ title, children }: { title?: string; children: React.ReactNode }) {
