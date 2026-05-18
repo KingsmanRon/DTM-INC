@@ -261,7 +261,7 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
               <InfoGrid>
                 <KV k="Name" v={`${data.responsible.first_names} ${data.responsible.surname}`} />
                 <KV k="ID" v={data.responsible.id_number} />
-                <KV k="DOB" v={data.responsible.date_of_birth} />
+                <KV k="Date of Birth" v={data.responsible.date_of_birth} />
                 <KV k="Phone" v={data.responsible.phone} />
                 <KV k="Employer" v={data.responsible.employer_name} />
                 <KV k="Occupation" v={data.responsible.occupation} />
