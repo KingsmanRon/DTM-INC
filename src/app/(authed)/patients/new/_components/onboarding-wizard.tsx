@@ -17,7 +17,7 @@ type Draft = {
 const emptyDraft: Draft = {
   section_a: { hospital: "Nkanyezi Private Hospital", title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
   section_b: { same_as_patient: false, title: "Mr", first_names: "", surname: "", id_number: "", date_of_birth: "", marital_status: "single", email: "", phone: "+27", home_address: "", spouse_partner_phone: "", spouse_partner_work_phone: "", employer_name: "", occupation: "", work_address: "", work_phone: "" },
-  section_c: { same_as_responsible: true, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
+  section_c: { same_as_responsible: false, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
   section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "", referral_notes: "" },
   dependants: [],
