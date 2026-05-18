@@ -137,10 +137,6 @@ function LoginShell(props: {
           Doctor and admin accounts require MFA (TOTP). You will be prompted on first sign-in.
         </p>
 
-        <p className="text-text-secondary text-xs pt-4 border-t border-border-subtle">
-          This is a POPIA-protected system. All access is logged.
-          Information Officer: Dr. Thomas Mtshali.
-        </p>
       </form>
     </main>
   );
