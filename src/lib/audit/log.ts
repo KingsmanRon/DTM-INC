@@ -39,6 +39,8 @@ export type AuditInput = {
   entityId?: string | null;
   patientId?: string | null;
   metadata?: Record<string, unknown>;
+  deviceId?: string | null;
+  clientId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
 };
