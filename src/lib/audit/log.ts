@@ -26,14 +26,10 @@ export type AuditAction =
   | "practice_settings_update" | "onboarding_pdf_generate"
   | "break_glass_request" | "break_glass_access"
   | "appointment_create" | "appointment_update" | "appointment_check_in"
-  | "queue_assign" | "queue_status_transition"
+  | "queue_assign" | "queue_status_transition" | "queue_complete"
   | "consultation_start" | "consultation_complete"
-  | "offline_action_synced" | "sync_conflict_detected"
+  | "offline_action_synced" | "sync_success" | "sync_failed" | "sync_conflict" | "sync_conflict_detected"
   | "consent_capture" | "access_denied";
-  | "consent_capture" | "access_denied"
-  | "appointment_create" | "appointment_update" | "appointment_check_in"
-  | "queue_start" | "queue_complete"
-  | "sync_success" | "sync_failed" | "sync_conflict";
 
 export type AuditInput = {
   actorUserId: string | null;
