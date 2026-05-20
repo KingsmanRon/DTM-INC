@@ -3,6 +3,23 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/session";
 import { handleRouteError, jsonOk } from "@/lib/api/http";
 
+type LookupPatient = {
+  id: string;
+  first_names: string;
+  surname: string;
+  file_number: string | null;
+  id_number: string | null;
+  passport_number: string | null;
+  phone: string | null;
+};
+
+type LookupAppointmentRow = {
+  id: string;
+  scheduled_at: string;
+  doctor_id: string;
+  patient: LookupPatient[] | null;
+};
+
 export async function POST(req: NextRequest) {
   try {
     await requireRole(["doctor", "staff"]);
@@ -22,16 +39,17 @@ export async function POST(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    const records = (data ?? []).filter((r: any) => {
-      const p = r.patient;
+    const rows = (data ?? []) as LookupAppointmentRow[];
+    const records = rows.filter((r) => {
+      const p = r.patient?.[0];
       if (!p) return false;
       if (body.idNumber && p.id_number !== body.idNumber) return false;
       if (body.passport && p.passport_number !== body.passport) return false;
       if (body.phone && p.phone !== body.phone) return false;
       return true;
-    }).map((r: any) => ({
+    }).map((r) => ({
       appointmentId: r.id,
-      patientName: `${r.patient.surname}, ${r.patient.first_names}`,
+      patientName: `${r.patient?.[0]?.surname ?? ""}, ${r.patient?.[0]?.first_names ?? ""}`,
       date,
       time: new Date(r.scheduled_at).toISOString().slice(11, 16),
     }));
