@@ -17,7 +17,9 @@ type Appointment = {
   patientFileNumber: string;
 };
 
-const doctors = ["All doctors", "Dr. Mtshali", "Dr. Moyo", "Dr. Naidoo"];
+const ALL_DOCTORS = "All doctors";
+const DEFAULT_DOCTOR = "Dr. Mtshali";
+const doctors = [ALL_DOCTORS, DEFAULT_DOCTOR, "Dr. Moyo", "Dr. Naidoo"];
 
 const initialAppointments: Appointment[] = [
   { id: "apt-001", time: "08:30", date: "2026-05-20", doctor: "Dr. Mtshali", reason: "Follow-up", status: "scheduled", patientName: "Nokuthula Maseko", patientFileNumber: "DTM-10021" },
@@ -34,13 +36,13 @@ function badge(status: AppointmentStatus) {
 
 export default function ReceptionAppointmentsPage() {
   const [dateFilter, setDateFilter] = useState("2026-05-20");
-  const [doctorFilter, setDoctorFilter] = useState(doctors[0]);
+  const [doctorFilter, setDoctorFilter] = useState(ALL_DOCTORS);
   const [appointments, setAppointments] = useState(initialAppointments);
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; first_names: string; surname: string; file_number: string } | null>(null);
 
   const filtered = useMemo(() => appointments.filter((item) => {
     const dateMatch = !dateFilter || item.date === dateFilter;
-    const doctorMatch = doctorFilter === "All doctors" || item.doctor === doctorFilter;
+    const doctorMatch = doctorFilter === ALL_DOCTORS || item.doctor === doctorFilter;
     return dateMatch && doctorMatch;
   }), [appointments, dateFilter, doctorFilter]);
 
@@ -51,7 +53,7 @@ export default function ReceptionAppointmentsPage() {
         id: `apt-${Math.random().toString(16).slice(2, 8)}`,
         time: "15:30",
         date: dateFilter || "2026-05-20",
-        doctor: doctorFilter === "All doctors" ? "Dr. Mtshali" : doctorFilter,
+        doctor: doctorFilter === ALL_DOCTORS ? DEFAULT_DOCTOR : doctorFilter,
         reason: "Reception booking",
         status: "scheduled",
         patientName: `${selectedPatient.surname}, ${selectedPatient.first_names}`,
