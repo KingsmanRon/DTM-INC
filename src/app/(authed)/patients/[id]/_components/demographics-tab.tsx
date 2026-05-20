@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { installOfflineReplayListener, writeWithOfflineQueue } from "@/lib/offline/queue";
 
 type PatientPayload = {
   patient: Record<string, string | null>;
@@ -44,6 +45,8 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
     referral_name: "",
     referral_phone: "",
   });
+
+  useEffect(() => installOfflineReplayListener(), []);
 
   useEffect(() => {
     let alive = true;
@@ -129,18 +132,24 @@ export function DemographicsTab({ patientId }: { patientId: string }) {
         referrer_phone: form.referral_phone || null,
       } : undefined,
     };
-    const res = await fetch(`/api/v1/patients/${patientId}`, {
+    const result = await writeWithOfflineQueue({
+      actionType: "patient.update_basic",
+      endpoint: `/api/v1/patients/${patientId}`,
       method: "PATCH",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      payload,
     });
-    if (!res.ok) {
+    if (result.queued) {
+      setError("Changes saved offline and will sync when online.");
+      setSaving(false);
+      setEditMode(false);
+      return;
+    }
+    if (!result.response?.ok) {
       setError("Failed to save changes.");
       setSaving(false);
       return;
     }
-    const json = await res.json();
+    const json = await result.response.json();
     setData((prev) => (prev ? { ...prev, patient: json.patient } : prev));
     setEditMode(false);
     setSaving(false);
