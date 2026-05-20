@@ -28,7 +28,7 @@ export type AuditAction =
   | "appointment_create" | "appointment_update" | "appointment_check_in"
   | "queue_assign" | "queue_status_transition" | "queue_complete"
   | "consultation_start" | "consultation_complete"
-  | "offline_action_synced" | "sync_success" | "sync_failed" | "sync_conflict" | "sync_conflict_detected"
+  | "offline_action_synced" | "sync_conflict_detected"
   | "consent_capture" | "access_denied";
 
 export type AuditInput = {

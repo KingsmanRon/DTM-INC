@@ -12,12 +12,11 @@ export async function GET() {
     end.setUTCDate(end.getUTCDate() + 1);
 
     const { data, error } = await admin
-      .from("appointments")
-      .select("id, patient_id, scheduled_at, checked_in_at, status")
-      .gte("scheduled_at", start.toISOString())
-      .lt("scheduled_at", end.toISOString())
-      .in("status", ["arrived", "in_progress"])
-      .order("checked_in_at", { ascending: true, nullsFirst: false });
+      .from("appointment_queue")
+      .select("id, appointment_id, patient_id, doctor_id, queue_date, queue_number, status, queued_at, in_room_at, completed_at")
+      .eq("queue_date", start.toISOString().slice(0, 10))
+      .in("status", ["queued", "called", "in_room"])
+      .order("queue_number", { ascending: true });
 
     if (error) throw error;
     return jsonOk({ queue: data ?? [] });

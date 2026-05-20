@@ -1,11 +1,11 @@
 "use client";
 
 type OfflineActionType =
-  | "appointment.create"
-  | "appointment.update"
-  | "appointment.check_in"
-  | "queue.create"
-  | "queue.update_status"
+  | "appointment_create"
+  | "appointment_update"
+  | "appointment_check_in"
+  | "queue_start"
+  | "queue_complete"
   | "patient.create_basic"
   | "patient.update_basic";
 

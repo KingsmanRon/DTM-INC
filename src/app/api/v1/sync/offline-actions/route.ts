@@ -46,19 +46,19 @@ export async function POST(req: NextRequest) {
 
         if (rpcErr) {
           outcomes.push({ client_action_id: action.client_action_id, status: "failed", error: rpcErr.message });
-          await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "sync_failed", entityType: "offline_action", entityId: action.client_action_id, metadata: { reason: rpcErr.message } });
+          await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "sync_conflict_detected", entityType: "offline_action", entityId: action.client_action_id, metadata: { reason: rpcErr.message } });
           continue;
         }
 
         const outcome = (rpcData as { status?: string; result?: unknown; conflict?: unknown } | null) ?? null;
         if (outcome?.status === "conflict") {
           outcomes.push({ client_action_id: action.client_action_id, status: "conflict", conflict: outcome.conflict ?? null });
-          await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "sync_conflict", entityType: "offline_action", entityId: action.client_action_id, metadata: { conflict: outcome.conflict ?? null } });
+          await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "sync_conflict_detected", entityType: "offline_action", entityId: action.client_action_id, metadata: { conflict: outcome.conflict ?? null } });
           continue;
         }
 
         outcomes.push({ client_action_id: action.client_action_id, status: "synced", result: outcome?.result ?? null });
-        await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "sync_success", entityType: "offline_action", entityId: action.client_action_id, metadata: { action_type: action.type }, ipAddress: clientIp(req), userAgent: req.headers.get("user-agent") });
+        await writeAudit({ actorUserId: session.userId, actorRole: session.role, action: "offline_action_synced", entityType: "offline_action", entityId: action.client_action_id, metadata: { action_type: action.type }, ipAddress: clientIp(req), userAgent: req.headers.get("user-agent") });
       } catch (actionErr) {
         outcomes.push({ client_action_id: action.client_action_id, status: "failed", error: actionErr instanceof Error ? actionErr.message : "unknown_error" });
       }
