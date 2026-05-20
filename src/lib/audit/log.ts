@@ -25,6 +25,11 @@ export type AuditAction =
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"
   | "practice_settings_update" | "onboarding_pdf_generate"
   | "break_glass_request" | "break_glass_access"
+  | "appointment_create" | "appointment_update" | "appointment_check_in"
+  | "queue_assign" | "queue_status_transition"
+  | "consultation_start" | "consultation_complete"
+  | "offline_action_synced" | "sync_conflict_detected"
+  | "consent_capture" | "access_denied";
   | "consent_capture" | "access_denied"
   | "appointment_create" | "appointment_update" | "appointment_check_in"
   | "queue_start" | "queue_complete"
