@@ -23,14 +23,14 @@ export async function POST(req: NextRequest) {
 
     for (const action of actions) {
       const { data: existing } = await admin
-        .from("offline_sync_actions")
-        .select("id, status, result_json")
+        .from("offline_sync_events")
+        .select("id, status, response_payload")
         .eq("client_action_id", action.client_action_id)
         .eq("actor_user_id", session.userId)
         .maybeSingle();
 
       if (existing) {
-        outcomes.push({ client_action_id: action.client_action_id, status: "synced", result: existing.result_json });
+        outcomes.push({ client_action_id: action.client_action_id, status: "synced", result: existing.response_payload });
         continue;
       }
 

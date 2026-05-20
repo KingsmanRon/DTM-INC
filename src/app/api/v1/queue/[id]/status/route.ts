@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 const UpdateQueueStatusSchema = z.object({
-  status: z.enum(["in_progress", "completed"]),
+  status: z.enum(["in_room", "completed"]),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,14 +17,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const admin = getSupabaseAdmin();
 
     const updatePayload: Record<string, unknown> = { status: body.status, updated_by: session.userId };
-    if (body.status === "in_progress") updatePayload.started_at = new Date().toISOString();
+    if (body.status === "in_room") updatePayload.in_room_at = new Date().toISOString();
     if (body.status === "completed") updatePayload.completed_at = new Date().toISOString();
 
     const { data, error } = await admin
-      .from("appointments")
+      .from("appointment_queue")
       .update(updatePayload)
       .eq("id", id)
-      .select("id, patient_id, status, started_at, completed_at")
+      .select("id, patient_id, status, in_room_at, completed_at")
       .maybeSingle();
 
     if (error) throw error;
@@ -33,11 +33,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await writeAudit({
       actorUserId: session.userId,
       actorRole: session.role,
-      action: body.status === "in_progress" ? "queue_start" : "queue_complete",
-      entityType: "appointment",
+      action: body.status === "in_room" ? "consultation_start" : "consultation_complete",
+      entityType: "appointment_queue",
       entityId: data.id,
       patientId: data.patient_id,
-      metadata: { status: data.status, started_at: data.started_at, completed_at: data.completed_at },
+      metadata: { status: data.status, in_room_at: data.in_room_at, completed_at: data.completed_at },
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });

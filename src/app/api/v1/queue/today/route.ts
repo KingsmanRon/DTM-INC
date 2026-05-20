@@ -16,7 +16,7 @@ export async function GET() {
       .select("id, patient_id, scheduled_at, checked_in_at, status")
       .gte("scheduled_at", start.toISOString())
       .lt("scheduled_at", end.toISOString())
-      .in("status", ["checked_in", "in_progress"])
+      .in("status", ["arrived", "in_progress"])
       .order("checked_in_at", { ascending: true, nullsFirst: false });
 
     if (error) throw error;

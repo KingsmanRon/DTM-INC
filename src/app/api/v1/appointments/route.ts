@@ -7,6 +7,7 @@ import { clientIp, handleRouteError, jsonOk, parseJson } from "@/lib/api/http";
 
 const CreateAppointmentSchema = z.object({
   patient_id: z.string().uuid(),
+  doctor_id: z.string().uuid(),
   scheduled_at: z.string().datetime(),
   reason: z.string().trim().min(1).max(400).optional(),
   notes: z.string().trim().max(4000).optional(),
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
       .from("appointments")
       .insert({
         patient_id: body.patient_id,
+        doctor_id: body.doctor_id,
         scheduled_at: body.scheduled_at,
         reason: body.reason ?? null,
         notes: body.notes ?? null,

@@ -8,11 +8,13 @@ type QueueRow = {
   id: string;
   patient_id: string;
   queue_number: number;
-  appointment_time: string;
-  reason: string | null;
-  arrived_at: string | null;
-  status: "waiting" | "arrived" | "with_doctor" | "completed";
-  started_at: string | null;
+  queued_at: string | null;
+  status: "queued" | "called" | "in_room" | "completed";
+  appointment: {
+    id: string;
+    scheduled_at: string;
+    reason: string | null;
+  } | null;
   completed_at: string | null;
   patient: {
     first_names: string;
@@ -48,8 +50,8 @@ async function startConsultation(formData: FormData) {
   const queueId = String(formData.get("queueId") ?? "");
   const supabase = await getSupabaseServer();
   await supabase
-    .from("consultation_queue")
-    .update({ status: "with_doctor", started_at: new Date().toISOString() })
+    .from("appointment_queue")
+    .update({ status: "in_room", in_room_at: new Date().toISOString() })
     .eq("id", queueId)
     .neq("status", "completed");
 
@@ -64,7 +66,7 @@ async function completeConsultation(formData: FormData) {
   const queueId = String(formData.get("queueId") ?? "");
   const supabase = await getSupabaseServer();
   await supabase
-    .from("consultation_queue")
+    .from("appointment_queue")
     .update({ status: "completed", completed_at: new Date().toISOString() })
     .eq("id", queueId);
 
@@ -77,9 +79,9 @@ export default async function DoctorQueuePage() {
 
   const supabase = await getSupabaseServer();
   const { data, error } = await supabase
-    .from("consultation_queue")
-    .select("id, patient_id, queue_number, appointment_time, reason, arrived_at, status, started_at, completed_at, patient:patients(first_names,surname,file_number)")
-    .in("status", ["waiting", "arrived", "with_doctor", "completed"])
+    .from("appointment_queue")
+    .select("id, patient_id, queue_number, queued_at, status, completed_at, appointment:appointments(id,scheduled_at,reason), patient:patients(first_names,surname,file_number)")
+    .in("status", ["queued", "called", "in_room", "completed"])
     .order("queue_number", { ascending: true })
     .returns<QueueRow[]>();
 
@@ -122,22 +124,22 @@ export default async function DoctorQueuePage() {
               <dl className="text-sm space-y-1">
                 <div className="flex justify-between gap-3">
                   <dt className="text-text-secondary">Appointment</dt>
-                  <dd>{formatAppt(ticket.appointment_time)}</dd>
+                  <dd>{formatAppt(ticket.appointment?.scheduled_at ?? ticket.queued_at ?? new Date().toISOString())}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-text-secondary">Reason</dt>
-                  <dd className="text-right">{ticket.reason ?? "General consultation"}</dd>
+                  <dd className="text-right">{ticket.appointment?.reason ?? "General consultation"}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-text-secondary">Waiting duration</dt>
-                  <dd>{formatDuration(ticket.arrived_at)}</dd>
+                  <dd>{formatDuration(ticket.queued_at)}</dd>
                 </div>
               </dl>
 
               <div className="flex flex-wrap gap-2">
                 <form action={startConsultation}>
                   <input type="hidden" name="queueId" value={ticket.id} />
-                  <button className="btn-secondary" disabled={ticket.status === "with_doctor" || ticket.status === "completed"}>
+                  <button className="btn-secondary" disabled={ticket.status === "in_room" || ticket.status === "completed"}>
                     Start consultation
                   </button>
                 </form>
