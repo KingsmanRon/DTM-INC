@@ -9,7 +9,7 @@ const UpdateAppointmentSchema = z.object({
   scheduled_at: z.string().datetime().optional(),
   reason: z.string().trim().min(1).max(400).optional(),
   notes: z.string().trim().max(4000).optional(),
-  status: z.enum(["scheduled", "checked_in", "in_progress", "completed", "cancelled"]).optional(),
+  status: z.enum(["scheduled", "arrived", "in_progress", "completed", "cancelled", "no_show"]).optional(),
 }).refine((v) => Object.keys(v).length > 0, { message: "at_least_one_field_required" });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
