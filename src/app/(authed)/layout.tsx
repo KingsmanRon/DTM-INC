@@ -61,6 +61,7 @@ export default async function AuthedLayout({ children }: { children: React.React
                 <Link href="/admin/users" className="hover:text-accent-teal">Users</Link>
                 <Link href="/admin/audit" className="hover:text-accent-teal">Audit</Link>
                 <Link href="/admin/settings" className="hover:text-accent-teal">Settings</Link>
+                <Link href="/admin/conflicts" className="hover:text-accent-teal">Conflicts</Link>
               </>
             ) : null}
           </nav>

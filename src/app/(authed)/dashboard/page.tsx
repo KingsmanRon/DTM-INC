@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PatientSearch } from "./_components/patient-search";
+import { SyncStatusPanel } from "@/components/SyncStatusPanel";
 
 export default function DashboardPage() {
   return (
@@ -9,6 +10,7 @@ export default function DashboardPage() {
         <p className="text-text-secondary text-sm mb-4">
           Search by file number, name, ID, phone, or medical aid number.
         </p>
+        <div className="mb-4"><SyncStatusPanel /></div>
         <PatientSearch />
       </section>
 
