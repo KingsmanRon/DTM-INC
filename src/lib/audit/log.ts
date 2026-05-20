@@ -25,7 +25,10 @@ export type AuditAction =
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"
   | "practice_settings_update" | "onboarding_pdf_generate"
   | "break_glass_request" | "break_glass_access"
-  | "consent_capture" | "access_denied";
+  | "consent_capture" | "access_denied"
+  | "appointment_create" | "appointment_update" | "appointment_check_in"
+  | "queue_start" | "queue_complete"
+  | "sync_success" | "sync_failed" | "sync_conflict";
 
 export type AuditInput = {
   actorUserId: string | null;
