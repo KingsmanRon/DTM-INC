@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
+import { installOfflineReplayListener, writeWithOfflineQueue } from "@/lib/offline/queue";
 
 type Draft = {
   section_a: { hospital: "Nkanyezi Private Hospital" | "Fountain Private Hospital" | "Mediclinic Vereeniging Hospital" | "Midvaal Private Hospital"; title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "other"; id_number: string; id_country?: string; email: string; phone: string; address: string };
@@ -104,6 +105,8 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
     });
   }
 
+  useEffect(() => installOfflineReplayListener(), []);
+
   const saIdError = useMemo(() => {
     const v = draft.section_a;
     if (v.id_type === "sa_id" && v.id_number && !isValidSaId(v.id_number)) return "SA ID checksum failed.";
@@ -132,14 +135,18 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           patient_present_attestation: draft.consent.patient_present_attestation,
         },
       };
-      const res = await fetch("/api/v1/patients", {
+      const writeResult = await writeWithOfflineQueue({
+        actionType: "patient.create_basic",
+        endpoint: "/api/v1/patients",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(payload),
+        payload: { ...payload, local_id: `local:${crypto.randomUUID()}` },
       });
-      const body = await res.json();
-      if (!res.ok) {
+      if (writeResult.queued) {
+        setError("Saved offline. This patient will sync automatically once connectivity restores.");
+        return;
+      }
+      const body = await writeResult.response?.json();
+      if (!writeResult.response?.ok) {
         setError(body.error ?? "Submit failed");
         if (body.issues) setIssues(body.issues.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`));
         return;

@@ -30,6 +30,10 @@ export type AuditAction =
   | "consultation_start" | "consultation_complete"
   | "offline_action_synced" | "sync_conflict_detected"
   | "consent_capture" | "access_denied";
+  | "consent_capture" | "access_denied"
+  | "appointment_create" | "appointment_update" | "appointment_check_in"
+  | "queue_start" | "queue_complete"
+  | "sync_success" | "sync_failed" | "sync_conflict";
 
 export type AuditInput = {
   actorUserId: string | null;
