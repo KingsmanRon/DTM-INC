@@ -1,4 +1,6 @@
 -- Add mandatory hospital capture on patient onboarding and use hospital-based file number prefixes.
+-- Guardrail: hospital -> prefix mapping is authoritative in onboard_patient() and
+-- unknown hospitals must hard-fail before allocate_file_number() is called.
 
 alter table patients
   add column if not exists hospital text;
@@ -41,24 +43,27 @@ declare
   v_payer       payer_type;
   v_hospital    text;
   v_prefix      text;
+  -- Single source of truth for hospital -> prefix allocation mapping.
+  v_hospital_prefix_map constant jsonb := jsonb_build_object(
+    'Nkanyezi Private Hospital', 'NKA',
+    'Fountain Private Hospital', 'FOU',
+    'Mediclinic Vereeniging Hospital', 'MED',
+    'Midvaal Private Hospital', 'MID'
+  );
 begin
   v_hospital := p_section_a->>'hospital';
 
-  if v_hospital not in (
-    'Nkanyezi Private Hospital',
-    'Fountain Private Hospital',
-    'Mediclinic Vereeniging Hospital',
-    'Midvaal Private Hospital'
-  ) then
+  if v_hospital is null or not (v_hospital_prefix_map ? v_hospital) then
     raise exception 'Invalid hospital value: %', coalesce(v_hospital, 'null');
   end if;
 
-  v_prefix := case v_hospital
-    when 'Nkanyezi Private Hospital' then 'NKA'
-    when 'Fountain Private Hospital' then 'FOU'
-    when 'Mediclinic Vereeniging Hospital' then 'MED'
-    when 'Midvaal Private Hospital' then 'MID'
-  end;
+  v_prefix := v_hospital_prefix_map ->> v_hospital;
+
+  -- Defensive assertion: never silently fall back to a global/default prefix.
+  if v_prefix is null then
+    raise exception 'No file number prefix configured for hospital: %', v_hospital
+      using hint = 'Update v_hospital_prefix_map in migration 0013 before onboarding this hospital.';
+  end if;
 
   v_file_number := allocate_file_number(null, v_prefix);
 
