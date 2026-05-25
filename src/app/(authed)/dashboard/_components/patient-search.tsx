@@ -10,6 +10,7 @@ type Result = {
   surname: string;
   id_number: string;
   phone: string;
+  hospital: string;
   updated_at: string;
 };
 
