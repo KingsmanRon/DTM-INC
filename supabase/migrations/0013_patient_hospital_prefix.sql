@@ -13,6 +13,9 @@ alter table patients
   alter column hospital set not null;
 
 alter table patients
+  drop constraint if exists patients_hospital_allowed_values;
+
+alter table patients
   add constraint patients_hospital_allowed_values
   check (hospital in (
     'Nkanyezi Private Hospital',
