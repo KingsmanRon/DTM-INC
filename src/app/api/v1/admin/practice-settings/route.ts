@@ -37,10 +37,26 @@ const Patch = z.object({
   privacy_notice_body: z.string().optional(),
 });
 
+const GLOBAL_FALLBACK_FILE_PREFIX = "DTM";
+
 export async function PATCH(req: NextRequest) {
   try {
     const session = await requireRole("admin");
     const patch = await parseJson(req, Patch);
+
+    // Policy: file_number_prefix in practice_settings is a GLOBAL FALLBACK only.
+    // Hospital onboarding allocation uses explicit hospital->prefix mapping in SQL.
+    if (
+      patch.file_number_prefix !== undefined &&
+      patch.file_number_prefix !== GLOBAL_FALLBACK_FILE_PREFIX
+    ) {
+      return jsonError(
+        400,
+        "invalid_file_number_prefix_policy",
+        `file_number_prefix is a global fallback only and must remain ${GLOBAL_FALLBACK_FILE_PREFIX}. Update hospital prefix mapping in SQL onboarding logic instead.`
+      );
+    }
+
     const supabase = await getSupabaseServer();
     const { error } = await supabase
       .from("practice_settings")
