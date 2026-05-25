@@ -13,7 +13,12 @@ export async function GET(req: NextRequest) {
     const session = await requireRole(["doctor", "staff"]);
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
-    if (q.length < 2) return jsonOk({ data: [] });
+    const prefix = (url.searchParams.get("prefix") ?? "").trim().toUpperCase();
+    const sort = (url.searchParams.get("sort") ?? "updated_desc").trim();
+    const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "10", 10) || 10));
+
+    if (q.length < 2 && !prefix) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
 
     const supabase = await getSupabaseServer();
     const digits = q.replace(/\D/g, "");
@@ -39,16 +44,26 @@ export async function GET(req: NextRequest) {
     // `active_patients` is a security_invoker view defined in migration 0004
     // — filters `archived_at IS NULL` in one place so we don't scatter that
     // predicate across the codebase (per review §active_patients).
-    const { data, error } = await supabase
-      .from("active_patients")
-      .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at")
-      .or(conditions.join(","))
-      .order("updated_at", { ascending: false })
-      .limit(10);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    if (error) return jsonOk({ data: [], error: error.message });
+    let query = supabase
+      .from("active_patients")
+      .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at", { count: "exact" });
+
+    if (q.length >= 2) query = query.or(conditions.join(","));
+    if (prefix) query = query.ilike("file_number", `${prefix}-%`);
+
+    if (sort === "file_number_asc") query = query.order("file_number", { ascending: true });
+    else if (sort === "file_number_desc") query = query.order("file_number", { ascending: false });
+    else query = query.order("updated_at", { ascending: false });
+
+    const { data, error, count } = await query.range(from, to);
+
+    if (error) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false, error: error.message });
     void session;
-    return jsonOk({ data });
+    const total = count ?? 0;
+    return jsonOk({ data: data ?? [], total, page, pageSize, hasMore: to + 1 < total });
   } catch (err) {
     return handleRouteError(err);
   }
