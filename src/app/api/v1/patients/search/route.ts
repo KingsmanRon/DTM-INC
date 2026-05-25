@@ -14,12 +14,11 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
     const prefix = (url.searchParams.get("prefix") ?? "").trim().toUpperCase();
-    const hospital = (url.searchParams.get("hospital") ?? "").trim();
     const sort = (url.searchParams.get("sort") ?? "updated_desc").trim();
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "10", 10) || 10));
 
-    if (q.length < 2 && !prefix && !hospital) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
+    if (q.length < 2 && !prefix) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
 
     const supabase = await getSupabaseServer();
     const digits = q.replace(/\D/g, "");
@@ -50,11 +49,10 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from("active_patients")
-      .select("id, file_number, title, first_names, surname, id_number, phone, hospital, status, updated_at", { count: "exact" });
+      .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at", { count: "exact" });
 
     if (q.length >= 2) query = query.or(conditions.join(","));
     if (prefix) query = query.ilike("file_number", `${prefix}-%`);
-    if (hospital) query = query.eq("hospital", hospital);
 
     if (sort === "file_number_asc") query = query.order("file_number", { ascending: true });
     else if (sort === "file_number_desc") query = query.order("file_number", { ascending: false });

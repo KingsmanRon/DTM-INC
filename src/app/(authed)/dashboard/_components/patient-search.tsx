@@ -14,18 +14,18 @@ type Result = {
   updated_at: string;
 };
 
-const HOSPITALS = [
-  "Nkanyezi Private Hospital",
-  "Fountain Private Hospital",
-  "Mediclinic Vereeniging Hospital",
-  "Midvaal Private Hospital",
+const PRACTICES = [
+  { prefix: "", label: "All practices" },
+  { prefix: "NKA", label: "Nkanyezi Private Hospital" },
+  { prefix: "FOU", label: "Fountain Private Hospital" },
+  { prefix: "MED", label: "Mediclinic Vereeniging Hospital" },
+  { prefix: "MID", label: "Midvaal Private Hospital" },
 ] as const;
 
 export function PatientSearch() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [prefix, setPrefix] = useState("");
-  const [hospital, setHospital] = useState("");
   const [sort, setSort] = useState("updated_desc");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -34,7 +34,7 @@ export function PatientSearch() {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2 && !prefix && !hospital) { setResults([]); setHasMore(false); return; }
+    if (q.trim().length < 2 && !prefix) { setResults([]); setHasMore(false); return; }
 
     // §FR-5: 250ms debounce, type-ahead, up to 10 matches.
     timer.current = setTimeout(async () => {
@@ -47,7 +47,6 @@ export function PatientSearch() {
           sort,
         });
         if (prefix) params.set("prefix", prefix);
-        if (hospital) params.set("hospital", hospital);
         const res = await fetch(`/api/v1/patients/search?${params.toString()}`, {
           credentials: "same-origin",
         });
@@ -60,11 +59,16 @@ export function PatientSearch() {
     }, 250);
 
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [q, page, prefix, hospital, sort]);
+  }, [q, page, prefix, sort]);
 
   useEffect(() => {
     setPage(1);
-  }, [q, prefix, hospital, sort]);
+  }, [q, prefix, sort]);
+
+  function getPracticeLabel(fileNumber: string): string {
+    const code = fileNumber.split("-")[0] ?? "";
+    return PRACTICES.find((p) => p.prefix === code)?.label ?? "Unknown practice";
+  }
 
   return (
     <div className="space-y-2">
@@ -76,19 +80,10 @@ export function PatientSearch() {
         onChange={(e) => setQ(e.target.value)}
       />
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <select className="input" value={prefix} onChange={(e) => setPrefix(e.target.value)}>
-          <option value="">All prefixes</option>
-          <option value="NKA">NKA</option>
-          <option value="FOU">FOU</option>
-          <option value="MED">MED</option>
-          <option value="MID">MID</option>
-        </select>
-
-        <select className="input" value={hospital} onChange={(e) => setHospital(e.target.value)}>
-          <option value="">All hospitals</option>
-          {HOSPITALS.map((h) => (
-            <option key={h} value={h}>{h}</option>
+          {PRACTICES.map((p) => (
+            <option key={p.label} value={p.prefix}>{p.label}</option>
           ))}
         </select>
 
@@ -102,20 +97,19 @@ export function PatientSearch() {
       {loading ? <p className="text-xs text-text-secondary">Searching…</p> : null}
 
       {results.length > 0 ? (
-        <ul className="bg-surface-elevated border border-border-subtle rounded divide-y divide-border-subtle">
+        <ul className="bg-surface-elevated border border-border-subtle rounded-xl divide-y divide-border-subtle overflow-hidden shadow-sm">
           {results.map((r) => (
             <li key={r.id}>
-              <Link
-                href={`/patients/${r.id}`}
-                className="flex items-center justify-between px-4 py-3 hover:bg-bg-primary"
-              >
+              <Link href={`/patients/${r.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-bg-primary transition-colors">
                 <div>
                   <div className="font-medium">{r.surname}, {r.first_names}</div>
                   <div className="text-xs text-text-secondary">
-                    ID {r.id_number} · {r.phone} · {r.hospital}
+                    ID {r.id_number} · {r.phone} · {getPracticeLabel(r.file_number)}
                   </div>
                 </div>
-                <div className="file-number text-sm">{r.file_number}</div>
+                <div className="text-right">
+                  <div className="file-number text-sm">{r.file_number}</div>
+                </div>
               </Link>
             </li>
           ))}
