@@ -51,13 +51,17 @@ export default async function AuthedLayout({ children }: { children: React.React
           <nav className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:w-auto">
             <Link href="/dashboard" className="hover:text-accent-teal">Dashboard</Link>
             {session.role === "doctor" || session.role === "staff" ? (
-              <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
+              <>
+                <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
+                <Link href="/reception/appointments" className="hover:text-accent-teal">Appointments</Link>
+              </>
             ) : null}
             {session.role === "admin" ? (
               <>
                 <Link href="/admin/users" className="hover:text-accent-teal">Users</Link>
                 <Link href="/admin/audit" className="hover:text-accent-teal">Audit</Link>
                 <Link href="/admin/settings" className="hover:text-accent-teal">Settings</Link>
+                <Link href="/admin/conflicts" className="hover:text-accent-teal">Conflicts</Link>
               </>
             ) : null}
           </nav>

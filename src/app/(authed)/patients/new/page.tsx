@@ -2,6 +2,7 @@ import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OnboardingWizard } from "./_components/onboarding-wizard";
+import { SyncStatusPanel } from "@/components/SyncStatusPanel";
 
 export default async function NewPatientPage() {
   const session = await resolveSession();
@@ -26,6 +27,10 @@ export default async function NewPatientPage() {
       <p className="text-text-secondary text-sm mb-6">
         Capture every section from the paper form. File number is generated on submit.
       </p>
+
+      <div className="mb-4">
+        <SyncStatusPanel />
+      </div>
 
       <OnboardingWizard
         consentVersion={settings.active_consent_version}
