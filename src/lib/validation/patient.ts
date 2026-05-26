@@ -9,14 +9,32 @@ export const PayerType = z.enum(["medical_aid", "private"]);
 export const IdType = z.enum(["sa_id", "passport", "none_minor"]);
 export const Sex = z.enum(["m", "f", "other"]);
 export const ReferrerType = z.enum(["gp", "specialist", "hospital", "self", "other"]);
+export const TitleEnum = z.enum(["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"], {
+  errorMap: () => ({ message: "Please select a valid title." }),
+});
+export const MaritalStatus = z.enum(["single", "married", "divorced", "widowed", "partnered"], {
+  errorMap: () => ({ message: "Please select a valid marital status." }),
+});
+export const PayerType = z.enum(["medical_aid", "private"], {
+  errorMap: () => ({ message: "Please select a valid payer type." }),
+});
+export const IdType = z.enum(["sa_id", "passport", "other"], {
+  errorMap: () => ({ message: "Please select a valid ID type." }),
+});
+export const Sex = z.enum(["m", "f", "other"], {
+  errorMap: () => ({ message: "Please select a valid sex value." }),
+});
+export const ReferrerType = z.enum(["gp", "specialist", "hospital", "self", "other"], {
+  errorMap: () => ({ message: "Please select a valid referrer type." }),
+});
 
-const e164 = z.string().regex(/^\+?[0-9 ()-]{7,20}$/, "Invalid phone number");
-const emailOptional = z.string().email().optional().or(z.literal(""));
+const e164 = z.string().regex(/^\+?[0-9 ()-]{7,20}$/, "Please enter a valid phone number (7–20 digits).");
+const emailOptional = z.string().email("Please enter a valid email address.").optional().or(z.literal(""));
 
 export const IdNumberSchema = z.object({
   id_type: IdType,
-  id_number: z.string().min(3),
-  id_country: z.string().length(2).optional(),
+  id_number: z.string().min(3, "ID number must be at least 3 characters."),
+  id_country: z.string().length(2, "Passport country must be a 2-letter code.").optional(),
 }).refine((v) => v.id_type !== "sa_id" || isValidSaId(v.id_number), {
   message: "Invalid SA ID number (checksum failed)",
   path: ["id_number"],
@@ -26,17 +44,19 @@ export const IdNumberSchema = z.object({
 });
 
 // Section A — Patient details
-export const HospitalEnum = z.enum(["Nkanyezi Private Hospital", "Fountain Private Hospital", "Mediclinic Vereeniging Hospital", "Midvaal Private Hospital"]);
+export const HospitalEnum = z.enum(["Nkanyezi Private Hospital", "Fountain Private Hospital", "Mediclinic Vereeniging Hospital", "Midvaal Private Hospital"], {
+  errorMap: () => ({ message: "Please select a valid hospital." }),
+});
 
 export const SectionA = z.object({
   hospital: HospitalEnum,
   is_minor: z.boolean().default(false),
   title: TitleEnum,
-  first_names: z.string().min(1),
-  surname: z.string().min(1),
+  first_names: z.string().min(1, "Patient first names are required."),
+  surname: z.string().min(1, "Patient surname is required."),
   id_type: IdType,
-  id_number: z.string().min(3),
-  id_country: z.string().length(2).optional(),
+  id_number: z.string().min(3, "Patient ID number must be at least 3 characters."),
+  id_country: z.string().length(2, "Passport country must be a 2-letter code.").optional(),
   email: emailOptional,
   phone: e164,
   address: z.string().min(1),
@@ -80,20 +100,24 @@ export const SectionA = z.object({
       path: ["id_country"],
     });
   }
+  address: z.string().min(1, "Patient physical address is required."),
+}).refine((v) => v.id_type !== "sa_id" || isValidSaId(v.id_number), {
+  message: "Invalid SA ID number",
+  path: ["id_number"],
 });
 
 // Section B — Person responsible for account
 export const SectionB = z.object({
   same_as_patient: z.boolean(),
   title: TitleEnum,
-  first_names: z.string().min(1),
-  surname: z.string().min(1),
-  id_number: z.string().min(3),
-  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  first_names: z.string().min(1, "Responsible person first names are required."),
+  surname: z.string().min(1, "Responsible person surname is required."),
+  id_number: z.string().min(3, "Responsible person ID number must be at least 3 characters."),
+  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format."),
   marital_status: MaritalStatus,
   email: emailOptional,
   phone: e164,
-  home_address: z.string().min(1),
+  home_address: z.string().min(1, "Responsible person home address is required."),
   spouse_partner_phone: z.string().optional().or(z.literal("")),
   spouse_partner_work_phone: z.string().optional().or(z.literal("")),
   employer_name: z.string().optional().or(z.literal("")),
@@ -118,8 +142,8 @@ export const SectionC = z.object({
 
 // Section D — Nearest family / friend
 export const SectionD = z.object({
-  name: z.string().min(1),
-  relationship: z.string().min(1),
+  name: z.string().min(1, "Emergency contact name is required."),
+  relationship: z.string().min(1, "Emergency contact relationship is required."),
   address: z.string().optional().or(z.literal("")),
   email: emailOptional,
   phone: e164,
@@ -139,20 +163,22 @@ export const SectionE = z.object({
 
 // Section F — Dependants
 export const DependantSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1, "Dependant name is required."),
   sex: Sex,
-  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  dependant_code: z.string().min(1),
+  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Dependant date of birth must be in YYYY-MM-DD format."),
+  dependant_code: z.string().min(1, "Dependant code is required."),
   allergies: z.string().optional().or(z.literal("")),
 });
 
 // Section G — Consent
 export const ConsentCapture = z.object({
-  consent_text_version: z.string().min(1),
-  consent_text_hash: z.string().regex(/^[a-f0-9]{64}$/, "Must be sha256 hex"),
-  consent_summary_version: z.string().min(1),
-  signature_type: z.enum(["typed_name", "drawn_signature"]),
-  signature_value: z.string().min(1),
+  consent_text_version: z.string().min(1, "Consent version is required."),
+  consent_text_hash: z.string().regex(/^[a-f0-9]{64}$/, "Consent hash must be a valid SHA-256 hex value."),
+  consent_summary_version: z.string().min(1, "Consent summary version is required."),
+  signature_type: z.enum(["typed_name", "drawn_signature"], {
+    errorMap: () => ({ message: "Please select a valid signature type." }),
+  }),
+  signature_value: z.string().min(1, "A signature is required before submitting."),
   patient_present_attestation: z.literal(true, {
     errorMap: () => ({ message: "Staff must attest patient was present" }),
   }),
