@@ -360,14 +360,13 @@ export function OnboardingWizard(props: {
                 >
                   <option value="sa_id">SA ID</option>
                   <option value="passport">Passport</option>
-                  {A.is_minor && <option value="none_minor">No adult ID (minor)</option>}
+                  {A.is_minor && <option value="none_minor">No ID yet (minor)</option>}
                 </select>
               </Field>
 
               {A.is_minor && (
                 <p className="col-span-2 text-xs text-text-secondary">
-                  Minor onboarding: if the patient has no SA ID/passport yet, choose <strong>No adult ID (minor)</strong>.
-                  Section B is mandatory and must contain guardian/responsible-party identity details.
+                  For minors without an SA ID or passport, choose “No ID yet (minor)”. Section B must contain the guardian or responsible party’s identity details.
                 </p>
               )}
 
