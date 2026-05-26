@@ -8,7 +8,16 @@ export function jsonOk<T>(body: T, init?: ResponseInit) {
 }
 
 export function jsonError(status: number, code: string, message?: string) {
-  return NextResponse.json({ error: code, message }, { status });
+  const safeMessage =
+    message ??
+    (code === "validation_error"
+      ? "Some submitted details are invalid. Please review the form and try again."
+      : code === "stale_consent"
+        ? "The consent text has changed. Please refresh and re-confirm consent before submitting."
+        : code === "onboarding_failed"
+          ? "We couldn’t save this patient right now. Please check the details and try again."
+          : "Request failed.");
+  return NextResponse.json({ error: code, message: safeMessage }, { status });
 }
 
 export async function parseJson<T>(req: NextRequest, schema: ZodSchema<T>): Promise<T> {
@@ -29,6 +38,7 @@ export class ValidationError extends Error {
     return NextResponse.json(
       {
         error: "validation_error",
+        message: "Some submitted details are invalid. Please review the form and try again.",
         issues: this.zodError.issues.map((i) => ({ path: i.path, message: i.message })),
       },
       { status: 422 }

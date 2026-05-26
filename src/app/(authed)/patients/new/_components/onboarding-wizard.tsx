@@ -26,6 +26,11 @@ const emptyDraft: Draft = {
 
 const STEPS = ["A — Patient", "B — Responsible", "C — Medical aid", "D — Emergency", "E — Referral", "F — Dependants", "G — Consent"] as const;
 const CONSENT_SUMMARY_VERSION = "cards-v1";
+const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
+  onboarding_failed: "We couldn’t save this patient. Please check required fields and try again.",
+  validation_error: "Some details are missing or invalid. Please review the highlighted fields and try again.",
+  stale_consent: "This consent version is no longer current. Refresh the page and review consent before submitting again.",
+};
 const CONSENT_CARDS = [
   {
     badge: "A",
@@ -140,7 +145,8 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error ?? "Submit failed");
+        const errorCode = typeof body.error === "string" ? body.error : "";
+        setError(ONBOARDING_ERROR_MESSAGES[errorCode] ?? body.message ?? "We couldn’t submit this patient right now. Please try again.");
         if (body.issues) setIssues(body.issues.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`));
         return;
       }
