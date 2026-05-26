@@ -5,66 +5,173 @@ import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 
 type Draft = {
-  section_a: { hospital: "Nkanyezi Private Hospital" | "Fountain Private Hospital" | "Mediclinic Vereeniging Hospital" | "Midvaal Private Hospital"; is_minor: boolean; title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "none_minor"; id_number: string; id_country?: string; email: string; phone: string; address: string };
-  section_b: { same_as_patient: boolean; title: string; first_names: string; surname: string; id_number: string; date_of_birth: string; marital_status: string; email: string; phone: string; home_address: string; spouse_partner_phone: string; spouse_partner_work_phone: string; employer_name: string; occupation: string; work_address: string; work_phone: string };
-  section_c: { same_as_responsible: boolean; main_member_name: string; medical_aid_name: string; membership_number: string; plan: string; other_plan_detail: string; is_private_payer: boolean };
+  section_a: {
+    hospital:
+      | "Nkanyezi Private Hospital"
+      | "Fountain Private Hospital"
+      | "Mediclinic Vereeniging Hospital"
+      | "Midvaal Private Hospital";
+    is_minor: boolean;
+    title: string;
+    first_names: string;
+    surname: string;
+    id_type: "sa_id" | "passport" | "none_minor";
+    id_number: string;
+    id_country?: string;
+    email: string;
+    phone: string;
+    address: string;
+  };
+  section_b: {
+    same_as_patient: boolean;
+    title: string;
+    first_names: string;
+    surname: string;
+    id_number: string;
+    date_of_birth: string;
+    marital_status: string;
+    email: string;
+    phone: string;
+    home_address: string;
+    spouse_partner_phone: string;
+    spouse_partner_work_phone: string;
+    employer_name: string;
+    occupation: string;
+    work_address: string;
+    work_phone: string;
+  };
+  section_c: {
+    same_as_responsible: boolean;
+    main_member_name: string;
+    medical_aid_name: string;
+    membership_number: string;
+    plan: string;
+    other_plan_detail: string;
+    is_private_payer: boolean;
+  };
   section_d: { name: string; relationship: string; address: string; email: string; phone: string };
-  section_e: { referrer_type: "gp" | "specialist" | "hospital" | "self" | "other"; referrer_name: string; referrer_phone: string; referral_notes: string };
-  dependants: Array<{ name: string; sex: "m" | "f" | "other"; date_of_birth: string; dependant_code: string; allergies: string }>;
-  consent: { signature_type: "typed_name" | "drawn_signature"; signature_value: string; patient_present_attestation: boolean };
+  section_e: {
+    referrer_type: "gp" | "specialist" | "hospital" | "self" | "other";
+    referrer_name: string;
+    referrer_phone: string;
+    referral_notes: string;
+  };
+  dependants: Array<{
+    name: string;
+    sex: "m" | "f" | "other";
+    date_of_birth: string;
+    dependant_code: string;
+    allergies: string;
+  }>;
+  consent: {
+    signature_type: "typed_name" | "drawn_signature";
+    signature_value: string;
+    patient_present_attestation: boolean;
+  };
 };
 
 const emptyDraft: Draft = {
-  section_a: { hospital: "Nkanyezi Private Hospital", is_minor: false, title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
-  section_b: { same_as_patient: false, title: "Mr", first_names: "", surname: "", id_number: "", date_of_birth: "", marital_status: "single", email: "", phone: "+27", home_address: "", spouse_partner_phone: "", spouse_partner_work_phone: "", employer_name: "", occupation: "", work_address: "", work_phone: "" },
-  section_c: { same_as_responsible: false, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
+  section_a: {
+    hospital: "Nkanyezi Private Hospital",
+    is_minor: false,
+    title: "Mr",
+    first_names: "",
+    surname: "",
+    id_type: "sa_id",
+    id_number: "",
+    email: "",
+    phone: "+27",
+    address: "",
+  },
+  section_b: {
+    same_as_patient: false,
+    title: "Mr",
+    first_names: "",
+    surname: "",
+    id_number: "",
+    date_of_birth: "",
+    marital_status: "single",
+    email: "",
+    phone: "+27",
+    home_address: "",
+    spouse_partner_phone: "",
+    spouse_partner_work_phone: "",
+    employer_name: "",
+    occupation: "",
+    work_address: "",
+    work_phone: "",
+  },
+  section_c: {
+    same_as_responsible: false,
+    main_member_name: "",
+    medical_aid_name: "",
+    membership_number: "",
+    plan: "",
+    other_plan_detail: "",
+    is_private_payer: false,
+  },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
   section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "", referral_notes: "" },
   dependants: [],
   consent: { signature_type: "typed_name", signature_value: "", patient_present_attestation: false },
 };
 
-const STEPS = ["A — Patient", "B — Responsible", "C — Medical aid", "D — Emergency", "E — Referral", "F — Dependants", "G — Consent"] as const;
+const STEPS = [
+  "A — Patient",
+  "B — Responsible",
+  "C — Medical aid",
+  "D — Emergency",
+  "E — Referral",
+  "F — Dependants",
+  "G — Consent",
+] as const;
+
 const CONSENT_SUMMARY_VERSION = "cards-v1";
+
 const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
   onboarding_failed: "We couldn’t save this patient. Please check required fields and try again.",
-  validation_error: "Some details are missing or invalid. Please review the highlighted fields and try again.",
-  stale_consent: "This consent version is no longer current. Refresh the page and review consent before submitting again.",
+  validation_error:
+    "Some details are missing or invalid. Please review the highlighted fields and try again.",
+  stale_consent:
+    "This consent version is no longer current. Refresh the page and review consent before submitting again.",
 };
+
 const CONSENT_CARDS = [
   {
     badge: "A",
     title: "Treatment consent",
-    body:
-      "I consent to consultation, examination and treatment by Dr. Thomas Mtshali and to such investigations and procedures as may, in his clinical judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.",
+    body: "I consent to consultation, examination and treatment by Dr. Thomas Mtshali and to such investigations and procedures as may, in his clinical judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.",
   },
   {
     badge: "B",
     title: "Information processing under POPIA",
-    body:
-      "I authorise Dr. Thomas Mtshali Inc. (\"the Practice\") to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.",
+    body: 'I authorise Dr. Thomas Mtshali Inc. ("the Practice") to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.',
   },
   {
     badge: "C",
     title: "Financial terms",
-    body:
-      "I accept personal responsibility for payment of fees not covered by my medical aid, including co-payments and shortfalls. I acknowledge cancellation/no-show terms and understand outstanding accounts may proceed to lawful collections processes.",
+    body: "I accept personal responsibility for payment of fees not covered by my medical aid, including co-payments and shortfalls. I acknowledge cancellation/no-show terms and understand outstanding accounts may proceed to lawful collections processes.",
   },
   {
     badge: "D",
     title: "Dependants (where applicable)",
-    body:
-      "Where I am the main member or legal guardian of any dependant whose details I provide, I confirm I am authorised to give the above consents on their behalf.",
+    body: "Where I am the main member or legal guardian of any dependant whose details I provide, I confirm I am authorised to give the above consents on their behalf.",
   },
 ] as const;
 
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-export function OnboardingWizard(props: { consentVersion: string; consentBody: string; privacyNotice: string }) {
+export function OnboardingWizard(props: {
+  consentVersion: string;
+  consentBody: string;
+  privacyNotice: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -72,7 +179,6 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
 
-  // §FR-3 "Same as patient" shortcut
   function applySameAsPatient(value: boolean) {
     setDraft((d) => {
       if (!value) return { ...d, section_b: { ...d.section_b, same_as_patient: false } };
@@ -86,7 +192,10 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           first_names: a.first_names,
           surname: a.surname,
           id_number: a.id_number,
-          date_of_birth: a.id_type === "sa_id" ? (dobFromSaId(a.id_number) ?? d.section_b.date_of_birth) : d.section_b.date_of_birth,
+          date_of_birth:
+            a.id_type === "sa_id"
+              ? (dobFromSaId(a.id_number) ?? d.section_b.date_of_birth)
+              : d.section_b.date_of_birth,
           email: a.email,
           phone: a.phone,
           home_address: a.address,
@@ -146,8 +255,14 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
       const body = await res.json();
       if (!res.ok) {
         const errorCode = typeof body.error === "string" ? body.error : "";
-        setError(ONBOARDING_ERROR_MESSAGES[errorCode] ?? body.message ?? "We couldn’t submit this patient right now. Please try again.");
-        if (body.issues) setIssues(body.issues.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`));
+        setError(
+          ONBOARDING_ERROR_MESSAGES[errorCode] ??
+            body.message ??
+            "We couldn’t submit this patient right now. Please try again."
+        );
+        if (body.issues) {
+          setIssues(body.issues.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`));
+        }
         return;
       }
       router.push(`/patients/${body.id}`);
@@ -169,7 +284,11 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           <button
             key={label}
             onClick={() => setStep(i)}
-            className={`text-xs px-3 py-1.5 rounded border ${i === step ? "bg-accent-dtm-green border-accent-dtm-green text-white" : "border-border-subtle text-text-secondary hover:text-white"}`}
+            className={`text-xs px-3 py-1.5 rounded border ${
+              i === step
+                ? "bg-accent-dtm-green border-accent-dtm-green text-white"
+                : "border-border-subtle text-text-secondary hover:text-white"
+            }`}
           >
             {label}
           </button>
@@ -181,19 +300,29 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
           <>
             <h2 className="section-title">A — Patient details</h2>
             <div className="grid grid-cols-2 gap-4">
-                            <Field label="Hospital" required>
-                <select className="input" value={A.hospital} onChange={(e) => setDraft({ ...draft, section_a: { ...A, hospital: e.target.value as Draft["section_a"]["hospital"] } })}>
+              <Field label="Hospital" required>
+                <select
+                  className="input"
+                  value={A.hospital}
+                  onChange={(e) =>
+                    setDraft({ ...draft, section_a: { ...A, hospital: e.target.value as Draft["section_a"]["hospital"] } })
+                  }
+                >
                   <option value="Nkanyezi Private Hospital">Nkanyezi Private Hospital</option>
                   <option value="Fountain Private Hospital">Fountain Private Hospital</option>
                   <option value="Mediclinic Vereeniging Hospital">Mediclinic Vereeniging Hospital</option>
                   <option value="Midvaal Private Hospital">Midvaal Private Hospital</option>
                 </select>
               </Field>
+
               <Field label="Title">
                 <select className="input" value={A.title} onChange={(e) => setDraft({ ...draft, section_a: { ...A, title: e.target.value } })}>
-                  {["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"].map((t) => <option key={t}>{t}</option>)}
+                  {["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"].map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
                 </select>
               </Field>
+
               <Field label="Under 18">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -206,7 +335,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                         section_a: {
                           ...A,
                           is_minor: isMinor,
-                          id_type: isMinor ? "none_minor" : (A.id_type === "none_minor" ? "sa_id" : A.id_type),
+                          id_type: isMinor ? "none_minor" : A.id_type === "none_minor" ? "sa_id" : A.id_type,
                           id_number: isMinor && A.id_type !== "none_minor" ? "" : A.id_number,
                           id_country: isMinor ? undefined : A.id_country,
                         },
@@ -217,39 +346,66 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   Patient is under 18 years old
                 </label>
               </Field>
+
               <Field label="ID type">
-                <select className="input" value={A.id_type} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "none_minor" } })}>
+                <select
+                  className="input"
+                  value={A.id_type}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "none_minor" },
+                    })
+                  }
+                >
                   <option value="sa_id">SA ID</option>
                   <option value="passport">Passport</option>
                   {A.is_minor && <option value="none_minor">No adult ID (minor)</option>}
                 </select>
               </Field>
+
               {A.is_minor && (
                 <p className="col-span-2 text-xs text-text-secondary">
                   Minor onboarding: if the patient has no SA ID/passport yet, choose <strong>No adult ID (minor)</strong>.
                   Section B is mandatory and must contain guardian/responsible-party identity details.
                 </p>
               )}
+
               <Field label="First names" required>
                 <input className="input" value={A.first_names} onChange={(e) => setDraft({ ...draft, section_a: { ...A, first_names: e.target.value } })} />
               </Field>
+
               <Field label="Surname" required>
                 <input className="input" value={A.surname} onChange={(e) => setDraft({ ...draft, section_a: { ...A, surname: e.target.value } })} />
               </Field>
-              <Field label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "Minor identifier / note"} required={A.id_type !== "none_minor"} error={saIdError ?? undefined}>
+
+              <Field
+                label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "Minor identifier / note"}
+                required={A.id_type !== "none_minor"}
+                error={saIdError ?? undefined}
+              >
                 <input className="input font-mono" value={A.id_number} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_number: e.target.value } })} />
               </Field>
+
               {A.id_type === "passport" && (
                 <Field label="Country (ISO-2)" required>
-                  <input className="input" maxLength={2} value={A.id_country ?? ""} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_country: e.target.value.toUpperCase() } })} />
+                  <input
+                    className="input"
+                    maxLength={2}
+                    value={A.id_country ?? ""}
+                    onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_country: e.target.value.toUpperCase() } })}
+                  />
                 </Field>
               )}
+
               <Field label="Email">
                 <input type="email" className="input" value={A.email} onChange={(e) => setDraft({ ...draft, section_a: { ...A, email: e.target.value } })} />
               </Field>
+
               <Field label="Tel / Cell" required>
                 <input className="input" value={A.phone} onChange={(e) => setDraft({ ...draft, section_a: { ...A, phone: e.target.value } })} />
               </Field>
+
               <Field label="Physical address" required full>
                 <textarea className="input" rows={3} value={A.address} onChange={(e) => setDraft({ ...draft, section_a: { ...A, address: e.target.value } })} />
               </Field>
@@ -297,7 +453,7 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
               <Field label="Home address" required full>
                 <textarea className="input" rows={2} value={B.home_address} onChange={(e) => setDraft({ ...draft, section_b: { ...B, home_address: e.target.value } })} />
               </Field>
-              {(B.marital_status === "married" || B.marital_status === "partnered") ? (
+              {B.marital_status === "married" || B.marital_status === "partnered" ? (
                 <>
                   <Field label="Spouse / Partner tel / cell">
                     <input className="input" value={B.spouse_partner_phone} onChange={(e) => setDraft({ ...draft, section_b: { ...B, spouse_partner_phone: e.target.value } })} />
@@ -307,10 +463,18 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   </Field>
                 </>
               ) : null}
-              <Field label="Employer"><input className="input" value={B.employer_name} onChange={(e) => setDraft({ ...draft, section_b: { ...B, employer_name: e.target.value } })} /></Field>
-              <Field label="Occupation"><input className="input" value={B.occupation} onChange={(e) => setDraft({ ...draft, section_b: { ...B, occupation: e.target.value } })} /></Field>
-              <Field label="Work address" full><input className="input" value={B.work_address} onChange={(e) => setDraft({ ...draft, section_b: { ...B, work_address: e.target.value } })} /></Field>
-              <Field label="Work tel"><input className="input" value={B.work_phone} onChange={(e) => setDraft({ ...draft, section_b: { ...B, work_phone: e.target.value } })} /></Field>
+              <Field label="Employer">
+                <input className="input" value={B.employer_name} onChange={(e) => setDraft({ ...draft, section_b: { ...B, employer_name: e.target.value } })} />
+              </Field>
+              <Field label="Occupation">
+                <input className="input" value={B.occupation} onChange={(e) => setDraft({ ...draft, section_b: { ...B, occupation: e.target.value } })} />
+              </Field>
+              <Field label="Work address" full>
+                <input className="input" value={B.work_address} onChange={(e) => setDraft({ ...draft, section_b: { ...B, work_address: e.target.value } })} />
+              </Field>
+              <Field label="Work tel">
+                <input className="input" value={B.work_phone} onChange={(e) => setDraft({ ...draft, section_b: { ...B, work_phone: e.target.value } })} />
+              </Field>
             </div>
           </>
         )}
@@ -381,17 +545,11 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
               </Field>
               {E.referrer_type !== "self" && (
                 <>
-                  <Field label="Referrer name" required>
-                    <input className="input" value={E.referrer_name} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_name: e.target.value } })} />
-                  </Field>
-                  <Field label="Referrer telephone" required>
-                    <input className="input" value={E.referrer_phone} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_phone: e.target.value } })} />
-                  </Field>
+                  <Field label="Referrer name" required><input className="input" value={E.referrer_name} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_name: e.target.value } })} /></Field>
+                  <Field label="Referrer telephone" required><input className="input" value={E.referrer_phone} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_phone: e.target.value } })} /></Field>
                 </>
               )}
-              <Field label="Referral notes" full>
-                <textarea className="input" rows={2} value={E.referral_notes} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referral_notes: e.target.value } })} />
-              </Field>
+              <Field label="Referral notes" full><textarea className="input" rows={2} value={E.referral_notes} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referral_notes: e.target.value } })} /></Field>
             </div>
           </>
         )}
@@ -403,25 +561,45 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
             <div className="space-y-3">
               {draft.dependants.map((dep, idx) => (
                 <div key={idx} className="grid grid-cols-6 gap-2 items-end">
-                  <Field label="Name"><input className="input" value={dep.name} onChange={(e) => {
-                    const next = [...draft.dependants]; next[idx] = { ...dep, name: e.target.value }; setDraft({ ...draft, dependants: next });
-                  }} /></Field>
+                  <Field label="Name">
+                    <input className="input" value={dep.name} onChange={(e) => {
+                      const next = [...draft.dependants];
+                      next[idx] = { ...dep, name: e.target.value };
+                      setDraft({ ...draft, dependants: next });
+                    }} />
+                  </Field>
                   <Field label="Sex">
                     <select className="input" value={dep.sex} onChange={(e) => {
-                      const next = [...draft.dependants]; next[idx] = { ...dep, sex: e.target.value as "m" | "f" | "other" }; setDraft({ ...draft, dependants: next });
+                      const next = [...draft.dependants];
+                      next[idx] = { ...dep, sex: e.target.value as "m" | "f" | "other" };
+                      setDraft({ ...draft, dependants: next });
                     }}>
-                      <option value="m">M</option><option value="f">F</option><option value="other">Other</option>
+                      <option value="m">M</option>
+                      <option value="f">F</option>
+                      <option value="other">Other</option>
                     </select>
                   </Field>
-                  <Field label="DOB"><input type="date" className="input" value={dep.date_of_birth} onChange={(e) => {
-                    const next = [...draft.dependants]; next[idx] = { ...dep, date_of_birth: e.target.value }; setDraft({ ...draft, dependants: next });
-                  }} /></Field>
-                  <Field label="Code"><input className="input" value={dep.dependant_code} onChange={(e) => {
-                    const next = [...draft.dependants]; next[idx] = { ...dep, dependant_code: e.target.value }; setDraft({ ...draft, dependants: next });
-                  }} /></Field>
-                  <Field label="Allergies"><input className="input" value={dep.allergies} onChange={(e) => {
-                    const next = [...draft.dependants]; next[idx] = { ...dep, allergies: e.target.value }; setDraft({ ...draft, dependants: next });
-                  }} /></Field>
+                  <Field label="DOB">
+                    <input type="date" className="input" value={dep.date_of_birth} onChange={(e) => {
+                      const next = [...draft.dependants];
+                      next[idx] = { ...dep, date_of_birth: e.target.value };
+                      setDraft({ ...draft, dependants: next });
+                    }} />
+                  </Field>
+                  <Field label="Code">
+                    <input className="input" value={dep.dependant_code} onChange={(e) => {
+                      const next = [...draft.dependants];
+                      next[idx] = { ...dep, dependant_code: e.target.value };
+                      setDraft({ ...draft, dependants: next });
+                    }} />
+                  </Field>
+                  <Field label="Allergies">
+                    <input className="input" value={dep.allergies} onChange={(e) => {
+                      const next = [...draft.dependants];
+                      next[idx] = { ...dep, allergies: e.target.value };
+                      setDraft({ ...draft, dependants: next });
+                    }} />
+                  </Field>
                   <button className="btn-secondary" onClick={() => setDraft({ ...draft, dependants: draft.dependants.filter((_, i) => i !== idx) })}>Remove</button>
                 </div>
               ))}
@@ -506,11 +684,18 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
   );
 }
 
-function Field(props: { label: string; required?: boolean; error?: string; full?: boolean; children: React.ReactNode }) {
+function Field(props: {
+  label: string;
+  required?: boolean;
+  error?: string;
+  full?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className={props.full ? "col-span-2" : ""}>
       <label className="label">
-        {props.label}{props.required ? <span className="text-state-danger"> *</span> : null}
+        {props.label}
+        {props.required ? <span className="text-state-danger"> *</span> : null}
       </label>
       {props.children}
       {props.error ? <p className="text-state-danger text-xs mt-1">{props.error}</p> : null}
