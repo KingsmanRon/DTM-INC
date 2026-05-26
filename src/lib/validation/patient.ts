@@ -6,7 +6,7 @@ import { isValidSaId } from "./sa-id";
 export const TitleEnum = z.enum(["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"]);
 export const MaritalStatus = z.enum(["single", "married", "divorced", "widowed", "partnered"]);
 export const PayerType = z.enum(["medical_aid", "private"]);
-export const IdType = z.enum(["sa_id", "passport", "other"]);
+export const IdType = z.enum(["sa_id", "passport", "none_minor"]);
 export const Sex = z.enum(["m", "f", "other"]);
 export const ReferrerType = z.enum(["gp", "specialist", "hospital", "self", "other"]);
 
@@ -30,6 +30,7 @@ export const HospitalEnum = z.enum(["Nkanyezi Private Hospital", "Fountain Priva
 
 export const SectionA = z.object({
   hospital: HospitalEnum,
+  is_minor: z.boolean().default(false),
   title: TitleEnum,
   first_names: z.string().min(1),
   surname: z.string().min(1),
@@ -39,9 +40,46 @@ export const SectionA = z.object({
   email: emailOptional,
   phone: e164,
   address: z.string().min(1),
-}).refine((v) => v.id_type !== "sa_id" || isValidSaId(v.id_number), {
-  message: "Invalid SA ID number",
-  path: ["id_number"],
+}).superRefine((v, ctx) => {
+  if (!v.is_minor) {
+    if (v.id_type === "none_minor") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Adults must use SA ID or passport",
+        path: ["id_type"],
+      });
+    }
+    if (v.id_type === "sa_id" && !isValidSaId(v.id_number)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid SA ID number",
+        path: ["id_number"],
+      });
+    }
+    if (v.id_type === "passport" && !v.id_country) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passport requires a country code",
+        path: ["id_country"],
+      });
+    }
+    return;
+  }
+
+  if (v.id_type === "sa_id" && !isValidSaId(v.id_number)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Invalid SA ID number",
+      path: ["id_number"],
+    });
+  }
+  if (v.id_type === "passport" && !v.id_country) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Passport requires a country code",
+      path: ["id_country"],
+    });
+  }
 });
 
 // Section B — Person responsible for account
@@ -129,6 +167,30 @@ export const OnboardingPayload = z.object({
   section_e: SectionE,
   dependants: z.array(DependantSchema).default([]),
   consent: ConsentCapture,
+}).superRefine((v, ctx) => {
+  if (!v.section_a.is_minor) return;
+  const b = v.section_b;
+  if (!b.id_number?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Guardian/responsible party ID number is required for minors",
+      path: ["section_b", "id_number"],
+    });
+  }
+  if (!b.first_names?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Guardian/responsible party first names are required for minors",
+      path: ["section_b", "first_names"],
+    });
+  }
+  if (!b.surname?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Guardian/responsible party surname is required for minors",
+      path: ["section_b", "surname"],
+    });
+  }
 });
 
 export type OnboardingPayload = z.infer<typeof OnboardingPayload>;

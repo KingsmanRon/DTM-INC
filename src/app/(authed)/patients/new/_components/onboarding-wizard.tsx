@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 
 type Draft = {
-  section_a: { hospital: "Nkanyezi Private Hospital" | "Fountain Private Hospital" | "Mediclinic Vereeniging Hospital" | "Midvaal Private Hospital"; title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "other"; id_number: string; id_country?: string; email: string; phone: string; address: string };
+  section_a: { hospital: "Nkanyezi Private Hospital" | "Fountain Private Hospital" | "Mediclinic Vereeniging Hospital" | "Midvaal Private Hospital"; is_minor: boolean; title: string; first_names: string; surname: string; id_type: "sa_id" | "passport" | "none_minor"; id_number: string; id_country?: string; email: string; phone: string; address: string };
   section_b: { same_as_patient: boolean; title: string; first_names: string; surname: string; id_number: string; date_of_birth: string; marital_status: string; email: string; phone: string; home_address: string; spouse_partner_phone: string; spouse_partner_work_phone: string; employer_name: string; occupation: string; work_address: string; work_phone: string };
   section_c: { same_as_responsible: boolean; main_member_name: string; medical_aid_name: string; membership_number: string; plan: string; other_plan_detail: string; is_private_payer: boolean };
   section_d: { name: string; relationship: string; address: string; email: string; phone: string };
@@ -15,7 +15,7 @@ type Draft = {
 };
 
 const emptyDraft: Draft = {
-  section_a: { hospital: "Nkanyezi Private Hospital", title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
+  section_a: { hospital: "Nkanyezi Private Hospital", is_minor: false, title: "Mr", first_names: "", surname: "", id_type: "sa_id", id_number: "", email: "", phone: "+27", address: "" },
   section_b: { same_as_patient: false, title: "Mr", first_names: "", surname: "", id_number: "", date_of_birth: "", marital_status: "single", email: "", phone: "+27", home_address: "", spouse_partner_phone: "", spouse_partner_work_phone: "", employer_name: "", occupation: "", work_address: "", work_phone: "" },
   section_c: { same_as_responsible: false, main_member_name: "", medical_aid_name: "", membership_number: "", plan: "", other_plan_detail: "", is_private_payer: false },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
@@ -188,20 +188,49 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
                   {["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"].map((t) => <option key={t}>{t}</option>)}
                 </select>
               </Field>
+              <Field label="Under 18">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={A.is_minor}
+                    onChange={(e) => {
+                      const isMinor = e.target.checked;
+                      setDraft({
+                        ...draft,
+                        section_a: {
+                          ...A,
+                          is_minor: isMinor,
+                          id_type: isMinor ? "none_minor" : (A.id_type === "none_minor" ? "sa_id" : A.id_type),
+                          id_number: isMinor && A.id_type !== "none_minor" ? "" : A.id_number,
+                          id_country: isMinor ? undefined : A.id_country,
+                        },
+                        section_b: { ...B, same_as_patient: isMinor ? false : B.same_as_patient },
+                      });
+                    }}
+                  />
+                  Patient is under 18 years old
+                </label>
+              </Field>
               <Field label="ID type">
-                <select className="input" value={A.id_type} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "other" } })}>
+                <select className="input" value={A.id_type} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "none_minor" } })}>
                   <option value="sa_id">SA ID</option>
                   <option value="passport">Passport</option>
-                  <option value="other">Other</option>
+                  {A.is_minor && <option value="none_minor">No adult ID (minor)</option>}
                 </select>
               </Field>
+              {A.is_minor && (
+                <p className="col-span-2 text-xs text-text-secondary">
+                  Minor onboarding: if the patient has no SA ID/passport yet, choose <strong>No adult ID (minor)</strong>.
+                  Section B is mandatory and must contain guardian/responsible-party identity details.
+                </p>
+              )}
               <Field label="First names" required>
                 <input className="input" value={A.first_names} onChange={(e) => setDraft({ ...draft, section_a: { ...A, first_names: e.target.value } })} />
               </Field>
               <Field label="Surname" required>
                 <input className="input" value={A.surname} onChange={(e) => setDraft({ ...draft, section_a: { ...A, surname: e.target.value } })} />
               </Field>
-              <Field label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "ID number"} required error={saIdError ?? undefined}>
+              <Field label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "Minor identifier / note"} required={A.id_type !== "none_minor"} error={saIdError ?? undefined}>
                 <input className="input font-mono" value={A.id_number} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_number: e.target.value } })} />
               </Field>
               {A.id_type === "passport" && (
@@ -225,8 +254,13 @@ export function OnboardingWizard(props: { consentVersion: string; consentBody: s
         {step === 1 && (
           <>
             <h2 className="section-title">B — Person responsible for account</h2>
+            {A.is_minor && (
+              <p className="text-xs text-text-secondary">
+                Guardian/responsible-party details are required for minors. Capture full legal identity and contact information below.
+              </p>
+            )}
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={B.same_as_patient} onChange={(e) => applySameAsPatient(e.target.checked)} />
+              <input type="checkbox" checked={B.same_as_patient} disabled={A.is_minor} onChange={(e) => applySameAsPatient(e.target.checked)} />
               Same as patient
             </label>
             <div className="grid grid-cols-2 gap-4">
