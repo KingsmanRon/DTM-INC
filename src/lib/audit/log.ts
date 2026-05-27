@@ -57,6 +57,74 @@ function computeEntryHash(prevHash: string | null, row: Record<string, unknown>)
 }
 
 const MAX_TAIL_COLLISION_RETRIES = 5;
+const MAX_TRANSIENT_RETRIES = 3;
+const TRANSIENT_BACKOFF_MS = 200;
+const AUDIT_TIMEOUT_BUDGET_MS = 1500;
+let auditCircuitOpenUntil = 0;
+let outboxDrainInFlight = false;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("audit_timeout_budget_exceeded")), timeoutMs)),
+  ]);
+}
+
+function isTransientAuditError(err: { code?: string; message?: string }): boolean {
+  const msg = (err.message ?? "").toLowerCase();
+  return err.code === "40001" || msg.includes("timeout") || msg.includes("temporar") || msg.includes("upstream");
+}
+
+async function enqueueAudit(input: AuditInput, reason: string): Promise<void> {
+  const admin = getSupabaseAdmin();
+  const { error } = await admin.from("audit_log_outbox").insert({
+    payload_json: input,
+    reason,
+    available_at: new Date().toISOString(),
+  });
+  if (error) {
+    console.error("[audit] outbox enqueue failed", { reason, error: error.message, code: (error as { code?: string }).code });
+    return;
+  }
+  void drainAuditOutbox();
+}
+
+async function drainAuditOutbox(): Promise<void> {
+  if (outboxDrainInFlight) return;
+  outboxDrainInFlight = true;
+  try {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("audit_log_outbox")
+      .select("id, payload_json, attempt_count")
+      .is("processed_at", null)
+      .lte("available_at", new Date().toISOString())
+      .order("created_at", { ascending: true })
+      .limit(10);
+    if (error || !data?.length) return;
+
+    for (const item of data) {
+      const input = item.payload_json as AuditInput;
+      const ok = await writeAuditImmediate(input);
+      if (ok) {
+        await admin.from("audit_log_outbox").update({ processed_at: new Date().toISOString(), last_error: null }).eq("id", item.id);
+      } else {
+        const attempts = (item.attempt_count ?? 0) + 1;
+        await admin.from("audit_log_outbox").update({
+          attempt_count: attempts,
+          last_error: "write_failed",
+          available_at: new Date(Date.now() + Math.min(30_000, attempts * 1_000)).toISOString(),
+        }).eq("id", item.id);
+      }
+    }
+  } finally {
+    outboxDrainInFlight = false;
+  }
+}
 
 async function insertAuditRowFallback(
   row: {
@@ -89,7 +157,7 @@ async function insertAuditRowFallback(
   return false;
 }
 
-export async function writeAudit(input: AuditInput): Promise<void> {
+async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
   const admin = getSupabaseAdmin();
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -103,7 +171,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
 
     if (readErr) {
       console.error("[audit] tail read failed", { action: input.action, error: readErr.message });
-      return;
+      return false;
     }
 
     const prevHash = last?.entry_hash ?? null;
@@ -138,7 +206,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
       p_created_at: createdAt,
     });
 
-    if (!error) return;
+    if (!error) return true;
 
     // 40001 = tail moved between our read and the function's re-check.
     // Re-read and recompute with the new tail; do not throw into user flow.
@@ -147,7 +215,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
 
     if (code === "42501") {
       const ok = await insertAuditRowFallback(row, entryHash, hasServiceRoleKey);
-      if (ok) return;
+      if (ok) return true;
     }
 
     console.error("[audit] insert failed", {
@@ -157,10 +225,39 @@ export async function writeAudit(input: AuditInput): Promise<void> {
       code,
       details: (error as { details?: string }).details,
     });
-    return;
+    return false;
   }
 
   console.error("[audit] insert failed after retries", { hasServiceRoleKey, action: input.action });
+  return false;
+}
+
+export async function writeAudit(input: AuditInput): Promise<void> {
+  if (Date.now() < auditCircuitOpenUntil) {
+    await enqueueAudit(input, "circuit_open");
+    return;
+  }
+
+  const start = Date.now();
+  for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {
+    try {
+      const remainingBudget = AUDIT_TIMEOUT_BUDGET_MS - (Date.now() - start);
+      if (remainingBudget <= 0) throw new Error("audit_timeout_budget_exceeded");
+      const ok = await withTimeout(writeAuditImmediate(input), remainingBudget);
+      if (ok) return;
+      throw new Error("audit_write_failed");
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      const transient = isTransientAuditError(e);
+      if (!transient || attempt === MAX_TRANSIENT_RETRIES - 1) {
+        auditCircuitOpenUntil = Date.now() + 30_000;
+        console.error("[audit] degraded_to_outbox", { action: input.action, transient, error: e.message });
+        await enqueueAudit(input, transient ? "transient_exhausted" : "non_transient");
+        return;
+      }
+      await sleep(TRANSIENT_BACKOFF_MS * (attempt + 1));
+    }
+  }
 }
 
 // Chain verification utility. Used by the daily cron (AC-7) and the
