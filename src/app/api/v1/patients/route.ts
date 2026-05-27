@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { requireRole } from "@/lib/auth/session";
-import { getSupabaseServer, getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { OnboardingPayload } from "@/lib/validation/patient";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
@@ -76,8 +76,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const admin = getSupabaseAdmin();
-    const { data, error } = await admin.rpc("onboard_patient", {
+    const { data, error } = await supabase.rpc("onboard_patient", {
       p_actor_user_id: session.userId,
       p_section_a: payload.section_a,
       p_section_b: payload.section_b,
