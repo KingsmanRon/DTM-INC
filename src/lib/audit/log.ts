@@ -14,7 +14,7 @@
 //   4. A daily verifier walks the chain and alerts on breaks
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AppRole } from "@/lib/auth/session";
 
 export type AuditAction =
@@ -60,6 +60,7 @@ const MAX_TAIL_COLLISION_RETRIES = 5;
 
 export async function writeAudit(input: AuditInput): Promise<void> {
   const admin = getSupabaseAdmin();
+  const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   for (let attempt = 0; attempt < MAX_TAIL_COLLISION_RETRIES; attempt++) {
     const { data: last, error: readErr } = await admin
@@ -112,11 +113,17 @@ export async function writeAudit(input: AuditInput): Promise<void> {
     // Re-read and recompute with the new tail; do not throw into user flow.
     if ((error as { code?: string }).code === "40001") continue;
 
-    console.error("[audit] insert failed", { action: input.action, error: error.message });
+    console.error("[audit] insert failed", {
+      hasServiceRoleKey,
+      action: input.action,
+      error: error.message,
+      code: (error as { code?: string }).code,
+      details: (error as { details?: string }).details,
+    });
     return;
   }
 
-  console.error("[audit] insert failed after retries", { action: input.action });
+  console.error("[audit] insert failed after retries", { hasServiceRoleKey, action: input.action });
 }
 
 // Chain verification utility. Used by the daily cron (AC-7) and the
