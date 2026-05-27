@@ -4,8 +4,7 @@
 // half the enforcement work.
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getServerEnv, PublicEnv } from "@/lib/env";
+import { PublicEnv } from "@/lib/env";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -29,18 +28,4 @@ export async function getSupabaseServer() {
   });
 }
 
-// Service-role client — bypasses RLS. Use ONLY for:
-//   * audit writes (via a dedicated audit_writer pg role, not this client,
-//     when SUPABASE_AUDIT_DB_URL is set)
-//   * admin operations explicitly gated by a prior authorisation check
-//   * break-glass clinical-notes access after a break_glass_requests row is
-//     validated (§10.4)
-// Never return rows from this client directly to a response without
-// re-verifying the caller's authorisation first.
-export function getSupabaseAdmin() {
-  const env = getServerEnv();
-  return createSupabaseClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { "x-dtm-service-client": "true" } },
-  });
-}
+export { getSupabaseAdmin } from "@/lib/supabase/admin";

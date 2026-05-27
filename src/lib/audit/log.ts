@@ -14,7 +14,7 @@
 //   4. A daily verifier walks the chain and alerts on breaks
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AppRole } from "@/lib/auth/session";
 
 export type AuditAction =
@@ -58,8 +58,40 @@ function computeEntryHash(prevHash: string | null, row: Record<string, unknown>)
 
 const MAX_TAIL_COLLISION_RETRIES = 5;
 
+async function insertAuditRowFallback(
+  row: {
+    actor_user_id: string | null;
+    actor_role: AppRole | null;
+    action: AuditAction;
+    entity_type: string | null;
+    entity_id: string | null;
+    patient_id: string | null;
+    metadata_json: Record<string, unknown>;
+    ip_address: string | null;
+    user_agent: string | null;
+    created_at: string;
+    prev_hash: string | null;
+  },
+  entryHash: string,
+  hasServiceRoleKey: boolean,
+): Promise<boolean> {
+  const admin = getSupabaseAdmin();
+  const { error } = await admin.from("audit_logs").insert({ ...row, entry_hash: entryHash });
+  if (!error) return true;
+
+  console.error("[audit] fallback insert failed", {
+    hasServiceRoleKey,
+    action: row.action,
+    error: error.message,
+    code: (error as { code?: string }).code,
+    details: (error as { details?: string }).details,
+  });
+  return false;
+}
+
 export async function writeAudit(input: AuditInput): Promise<void> {
   const admin = getSupabaseAdmin();
+  const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   for (let attempt = 0; attempt < MAX_TAIL_COLLISION_RETRIES; attempt++) {
     const { data: last, error: readErr } = await admin
@@ -110,13 +142,25 @@ export async function writeAudit(input: AuditInput): Promise<void> {
 
     // 40001 = tail moved between our read and the function's re-check.
     // Re-read and recompute with the new tail; do not throw into user flow.
-    if ((error as { code?: string }).code === "40001") continue;
+    const code = (error as { code?: string }).code;
+    if (code === "40001") continue;
 
-    console.error("[audit] insert failed", { action: input.action, error: error.message });
+    if (code === "42501") {
+      const ok = await insertAuditRowFallback(row, entryHash, hasServiceRoleKey);
+      if (ok) return;
+    }
+
+    console.error("[audit] insert failed", {
+      hasServiceRoleKey,
+      action: input.action,
+      error: error.message,
+      code,
+      details: (error as { details?: string }).details,
+    });
     return;
   }
 
-  console.error("[audit] insert failed after retries", { action: input.action });
+  console.error("[audit] insert failed after retries", { hasServiceRoleKey, action: input.action });
 }
 
 // Chain verification utility. Used by the daily cron (AC-7) and the
