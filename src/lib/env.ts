@@ -19,6 +19,34 @@ const ServerEnv = z.object({
   PDF_SERVICE_SHARED_SECRET: z.string().optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 }).superRefine((env, ctx) => {
+  if (env.SUPABASE_SERVICE_ROLE_KEY === env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SUPABASE_SERVICE_ROLE_KEY"],
+      message: "must not equal NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    });
+  }
+
+  // Legacy Supabase keys are JWTs. If this key is a JWT, assert the role
+  // claim is service_role so we fail fast on env mixups in production.
+  if (env.SUPABASE_SERVICE_ROLE_KEY.includes(".")) {
+    try {
+      const payloadB64 = env.SUPABASE_SERVICE_ROLE_KEY.split(".")[1] ?? "";
+      const payloadJson = Buffer.from(payloadB64, "base64url").toString("utf8");
+      const payload = JSON.parse(payloadJson) as { role?: string };
+      if (payload.role && payload.role !== "service_role") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["SUPABASE_SERVICE_ROLE_KEY"],
+          message: `JWT role claim must be service_role (got ${payload.role})`,
+        });
+      }
+    } catch {
+      // Non-JWT formats are allowed (Supabase secret keys). Ignore parse
+      // failures and rely on downstream auth failures if malformed.
+    }
+  }
+
   if (!env.CLINICAL_NOTES_KEK_DEV_KEY) return;
   try {
     const buf = Buffer.from(env.CLINICAL_NOTES_KEK_DEV_KEY, "base64");
