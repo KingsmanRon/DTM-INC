@@ -57,6 +57,10 @@ while (true) {
   for (const row of data) {
     const { id, entry_hash, chain_anchor_id, ...rest } = row;
     void id; void chain_anchor_id;
+    // Postgres returns timestamptz as "…+00:00"; the writer hashed the JS
+    // toISOString() form ("…Z"). Canonicalise to the same instant string so
+    // the recomputed hash matches what was stored.
+    rest.created_at = new Date(rest.created_at).toISOString();
     const expected = compute(prev, rest);
     if (expected !== entry_hash) {
       console.error(`CHAIN BROKEN at row ${row.id} (${row.created_at}) action=${row.action}`);
