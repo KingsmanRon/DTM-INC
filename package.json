@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate": "node scripts/run-migrations.mjs",
-    "db:verify-chain": "node scripts/verify-audit-chain.mjs"
+    "db:verify-chain": "node scripts/verify-audit-chain.mjs",
+    "db:audit-logs": "node scripts/fetch-audit-logs.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
