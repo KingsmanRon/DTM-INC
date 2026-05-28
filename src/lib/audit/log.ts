@@ -60,8 +60,10 @@ const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
 const AUDIT_TIMEOUT_BUDGET_MS = 4000;
+const OUTBOX_DRAIN_MIN_INTERVAL_MS = 60_000;
 let auditCircuitOpenUntil = 0;
 let outboxDrainInFlight = false;
+let nextOutboxDrainAt = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,13 +90,22 @@ async function enqueueAudit(input: AuditInput, reason: string): Promise<void> {
   });
   if (error) {
     console.error("[audit] outbox enqueue failed", { reason, error: error.message, code: (error as { code?: string }).code });
-    return;
   }
+}
+
+function scheduleOutboxDrain(): void {
+  // Opportunistic drain is intentionally rate-limited. When Supabase is degraded,
+  // every drain attempt uses the service-role REST API; retrying it from each
+  // request can amplify a transient audit outage into database CPU exhaustion.
+  const now = Date.now();
+  if (outboxDrainInFlight || now < nextOutboxDrainAt || now < auditCircuitOpenUntil) return;
+  nextOutboxDrainAt = now + OUTBOX_DRAIN_MIN_INTERVAL_MS;
   void drainAuditOutbox();
 }
 
 async function drainAuditOutbox(): Promise<void> {
   if (outboxDrainInFlight) return;
+  if (Date.now() < auditCircuitOpenUntil) return;
   outboxDrainInFlight = true;
   try {
     const admin = getSupabaseAdmin();
@@ -235,11 +246,10 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
 export async function writeAudit(input: AuditInput): Promise<void> {
   if (Date.now() < auditCircuitOpenUntil) {
     await enqueueAudit(input, "circuit_open");
-    void drainAuditOutbox();
     return;
   }
 
-  void drainAuditOutbox();
+  scheduleOutboxDrain();
 
   const start = Date.now();
   for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {

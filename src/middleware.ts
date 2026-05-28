@@ -42,6 +42,9 @@ function isPublic(pathname: string): boolean {
 }
 
 export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (isPublic(pathname)) return NextResponse.next({ request: { headers: req.headers } });
+
   const res = NextResponse.next({ request: { headers: req.headers } });
 
   const supabase = createServerClient(
@@ -63,9 +66,6 @@ export async function middleware(req: NextRequest) {
 
   // Refresh the session if expired. Swallow errors — authorisation happens later.
   const { data: { user } } = await supabase.auth.getUser();
-
-  const { pathname } = req.nextUrl;
-  if (isPublic(pathname)) return res;
 
   if (!user) {
     // API calls get a 401 so the client can handle it; pages redirect to /login.
