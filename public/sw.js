@@ -16,6 +16,15 @@ function isCrossOriginRequest(request) {
   return new URL(request.url).origin !== self.location.origin;
 }
 
+function logError(...args) {
+  // eslint-disable-next-line no-console
+  console.error("[sw]", ...args);
+}
+
+function isNavigationRequest(request) {
+  return request.mode === "navigate" || request.destination === "document";
+}
+
 function shouldBypassCache(request) {
   const url = new URL(request.url);
   const path = url.pathname.toLowerCase();
