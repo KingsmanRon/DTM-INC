@@ -16,15 +16,6 @@ function isCrossOriginRequest(request) {
   return new URL(request.url).origin !== self.location.origin;
 }
 
-function logError(...args) {
-  // eslint-disable-next-line no-console
-  console.error("[sw]", ...args);
-}
-
-function isNavigationRequest(request) {
-  return request.mode === "navigate" || request.destination === "document";
-}
-
 function shouldBypassCache(request) {
   const url = new URL(request.url);
   const path = url.pathname.toLowerCase();
@@ -77,8 +68,10 @@ async function fetchOrFallback(request, options = {}) {
       logError(options.context || "fetch failed", request.url, error);
     }
 
-    const cached = await caches.match(request);
-    if (cached) return cached;
+    if (options.allowCacheFallback !== false) {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+    }
 
     return options.fallbackResponse || Response.error();
   }
@@ -133,6 +126,7 @@ self.addEventListener("fetch", (event) => {
             context: "bypass fetch failed",
             // Cross-origin CSP denials are expected in some environments; avoid noisy logs.
             logOnError: !isCrossOriginRequest(request),
+            allowCacheFallback: false,
             fallbackResponse: Response.error(),
           });
         }
@@ -140,6 +134,7 @@ self.addEventListener("fetch", (event) => {
         if (!isSafeStaticRequest(request)) {
           return fetchOrFallback(request, {
             context: "non-cacheable fetch failed",
+            allowCacheFallback: false,
             fallbackResponse: Response.error(),
           });
         }
