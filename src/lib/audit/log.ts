@@ -57,9 +57,9 @@ function computeEntryHash(prevHash: string | null, row: Record<string, unknown>)
 }
 
 const MAX_TAIL_COLLISION_RETRIES = 5;
-const MAX_TRANSIENT_RETRIES = 3;
-const TRANSIENT_BACKOFF_MS = 200;
-const AUDIT_TIMEOUT_BUDGET_MS = 1500;
+const MAX_TRANSIENT_RETRIES = 4;
+const TRANSIENT_BACKOFF_MS = 250;
+const AUDIT_TIMEOUT_BUDGET_MS = 4000;
 let auditCircuitOpenUntil = 0;
 let outboxDrainInFlight = false;
 
@@ -235,8 +235,11 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
 export async function writeAudit(input: AuditInput): Promise<void> {
   if (Date.now() < auditCircuitOpenUntil) {
     await enqueueAudit(input, "circuit_open");
+    void drainAuditOutbox();
     return;
   }
+
+  void drainAuditOutbox();
 
   const start = Date.now();
   for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {
@@ -250,7 +253,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
       const e = err as { code?: string; message?: string };
       const transient = isTransientAuditError(e);
       if (!transient || attempt === MAX_TRANSIENT_RETRIES - 1) {
-        auditCircuitOpenUntil = Date.now() + 30_000;
+        auditCircuitOpenUntil = Date.now() + 10_000;
         console.error("[audit] degraded_to_outbox", { action: input.action, transient, error: e.message });
         await enqueueAudit(input, transient ? "transient_exhausted" : "non_transient");
         return;
