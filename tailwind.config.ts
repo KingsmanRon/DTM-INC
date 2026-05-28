@@ -22,8 +22,8 @@ const config: Config = {
         "state-danger": "#EF4444",
       },
       fontFamily: {
-        sans: ["Outfit", "system-ui", "sans-serif"],
-        mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
+        sans: ["var(--font-outfit)", "system-ui", "sans-serif"],
+        mono: ["var(--font-ibm-plex-mono)", "ui-monospace", "monospace"],
       },
     },
   },
