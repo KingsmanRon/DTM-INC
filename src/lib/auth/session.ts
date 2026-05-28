@@ -10,7 +10,16 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-import { sessionFromProfile, type AppProfileRow, type AppRole, type Session } from "@/lib/auth/profile";
+import {
+  APP_PROFILE_QUERY_DESCRIPTION,
+  APP_PROFILE_SELECT,
+  getProfileFailureReason,
+  profileFromQueryRow,
+  sessionFromProfile,
+  type AppProfileQueryRow,
+  type AppRole,
+  type Session,
+} from "@/lib/auth/profile";
 export type { AppRole, Session } from "@/lib/auth/profile";
 
 export class AuthError extends Error {
@@ -29,18 +38,50 @@ export async function resolveSession(): Promise<Session | null> {
   }
   if (!user) return null;
 
-  // Avoid the embedded PostgREST app_users -> roles join here. In production
-  // that relationship query can stall long enough to 504 login/dashboard
-  // resolution; this RPC performs the same lookup as a bounded SQL function
-  // under the caller's authenticated context, with no service_role key.
-  const { data, error } = await supabase.rpc("get_my_app_profile");
+  // Resolve the app profile under the caller's authenticated RLS context.
+  // This intentionally filters by the Supabase Auth user id, not email, because
+  // public.app_users.id is the 1:1 mirror of auth.users.id. The role is loaded
+  // through the explicit roles:role_id(name) relationship.
+  const profileQueryTarget = {
+    ...APP_PROFILE_QUERY_DESCRIPTION,
+    authenticatedUserId: user.id,
+    authenticatedEmail: user.email ?? null,
+    select: APP_PROFILE_SELECT,
+  };
+
+  console.info("[auth] app profile lookup started", { target: profileQueryTarget });
+
+  const { data, error } = await supabase
+    .from("app_users")
+    .select(APP_PROFILE_SELECT)
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const appUser = profileFromQueryRow((data as AppProfileQueryRow | null) ?? null);
+  const failureReason = getProfileFailureReason(appUser);
 
   if (error) {
-    console.error("[auth] get_my_app_profile failed", { message: error.message });
+    console.error("[auth] app profile lookup failed", {
+      target: profileQueryTarget,
+      supabaseError: {
+        code: error.code ?? null,
+        message: error.message ?? null,
+        details: error.details ?? null,
+        hint: error.hint ?? null,
+      },
+    });
     return null;
   }
 
-  const appUser = Array.isArray(data) ? (data[0] as AppProfileRow | undefined) ?? null : null;
+  console.info("[auth] app profile lookup completed", {
+    target: profileQueryTarget,
+    profileFound: Boolean(appUser),
+    missingAppUserRow: !appUser,
+    profileStatus: appUser?.status ?? null,
+    roleName: appUser?.role_name ?? null,
+    failureReason,
+  });
+
   return sessionFromProfile(appUser);
 }
 
