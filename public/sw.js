@@ -1,5 +1,5 @@
-const CACHE = "dtm-shell-v6";
-const SHELL_URLS = ["/", "/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
+const CACHE = "dtm-shell-v7";
+const SHELL_URLS = ["/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
 
 const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Offline</title></head><body><h1>You are offline</h1><p>Please reconnect and try again.</p></body></html>`;
 
@@ -86,9 +86,6 @@ async function networkFirstNavigation(request) {
   if (networkResponse && networkResponse.type !== "error") {
     return networkResponse;
   }
-
-  const appShell = await caches.match("/");
-  if (appShell) return appShell;
 
   return new Response(OFFLINE_HTML, {
     status: 200,
