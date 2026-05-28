@@ -56,6 +56,14 @@ function computeEntryHash(prevHash: string | null, row: Record<string, unknown>)
   return h.digest("hex");
 }
 
+// The writer hashes `created_at` as a JS ISO string (e.g. "…624Z"), but
+// Postgres/PostgREST return timestamptz as "…624+00:00". Hashing the raw DB
+// string would never match the stored hash, so verification must canonicalise
+// the timestamp back to the same instant representation the writer used.
+function canonicalTimestamp(ts: unknown): string {
+  return new Date(ts as string).toISOString();
+}
+
 const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
@@ -382,7 +390,7 @@ export async function verifyChain(): Promise<{ ok: boolean; brokenAt?: string }>
         metadata_json: rest.metadata_json,
         ip_address: rest.ip_address,
         user_agent: rest.user_agent,
-        created_at: rest.created_at,
+        created_at: canonicalTimestamp(rest.created_at),
         prev_hash: rest.prev_hash,
       });
       if (expected !== entry_hash) return { ok: false, brokenAt: row.id };
