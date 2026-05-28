@@ -1,4 +1,4 @@
-const CACHE = "dtm-shell-v7";
+const CACHE = "dtm-shell-v8";
 const SHELL_URLS = ["/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
 
 const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Offline</title></head><body><h1>You are offline</h1><p>Please reconnect and try again.</p></body></html>`;
@@ -19,10 +19,6 @@ function isCrossOriginRequest(request) {
 function shouldBypassCache(request) {
   const url = new URL(request.url);
   const path = url.pathname.toLowerCase();
-
-  if (request.method !== "GET") return true;
-
-  if (isCrossOriginRequest(request)) return true;
 
   if (
     path.startsWith("/_next/") ||
@@ -109,10 +105,19 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  // Only same-origin GET requests are eligible for SW handling. Everything else
+  // — cross-origin (Google Fonts, Supabase, …) and non-GET — is left to the
+  // browser by NOT calling respondWith(). A SW fetch() is governed by the CSP
+  // connect-src directive, whereas the browser's native loads use
+  // style-src/font-src/img-src. Re-fetching the cross-origin font stylesheet
+  // here was blocked by connect-src and returned a network error, crashing the
+  // app; passing it through lets style-src allow it.
+  if (request.method !== "GET" || isCrossOriginRequest(request)) return;
+
   event.respondWith(
     (async () => {
-      const { request } = event;
-
       try {
         if (isNavigationRequest(request)) {
           return networkFirstNavigation(request);
@@ -121,8 +126,6 @@ self.addEventListener("fetch", (event) => {
         if (shouldBypassCache(request)) {
           return fetchOrFallback(request, {
             context: "bypass fetch failed",
-            // Cross-origin CSP denials are expected in some environments; avoid noisy logs.
-            logOnError: !isCrossOriginRequest(request),
             allowCacheFallback: false,
             fallbackResponse: Response.error(),
           });
