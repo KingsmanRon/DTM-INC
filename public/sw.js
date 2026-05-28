@@ -1,5 +1,20 @@
-const CACHE = "dtm-shell-v4";
-const SHELL_URLS = ["/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
+const CACHE = "dtm-shell-v6";
+const SHELL_URLS = ["/", "/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
+
+const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Offline</title></head><body><h1>You are offline</h1><p>Please reconnect and try again.</p></body></html>`;
+
+function logError(...args) {
+  // eslint-disable-next-line no-console
+  console.error("[sw]", ...args);
+}
+
+function isNavigationRequest(request) {
+  return request.mode === "navigate" || request.destination === "document";
+}
+
+function isCrossOriginRequest(request) {
+  return new URL(request.url).origin !== self.location.origin;
+}
 
 function logError(...args) {
   // eslint-disable-next-line no-console
@@ -16,10 +31,7 @@ function shouldBypassCache(request) {
 
   if (request.method !== "GET") return true;
 
-  if (url.origin !== self.location.origin) {
-    // Always bypass cross-origin requests, including Supabase traffic.
-    return true;
-  }
+  if (isCrossOriginRequest(request)) return true;
 
   if (
     path.startsWith("/_next/") ||
@@ -57,23 +69,38 @@ function isSafeStaticRequest(request) {
   );
 }
 
-async function networkFirstNavigation(request) {
+async function fetchOrFallback(request, options = {}) {
   try {
-    const networkResponse = await fetch(request);
-    return networkResponse;
+    return await fetch(request);
   } catch (error) {
-    logError("navigation fetch failed", request.url, error);
+    if (options.logOnError !== false) {
+      logError(options.context || "fetch failed", request.url, error);
+    }
+
     const cached = await caches.match(request);
     if (cached) return cached;
 
-    const fallback = await caches.match("/manifest.webmanifest");
-    if (fallback) return fallback;
-
-    return new Response("Offline", {
-      status: 503,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
+    return options.fallbackResponse || Response.error();
   }
+}
+
+async function networkFirstNavigation(request) {
+  const networkResponse = await fetchOrFallback(request, {
+    context: "navigation fetch failed",
+    fallbackResponse: null,
+  });
+
+  if (networkResponse && networkResponse.type !== "error") {
+    return networkResponse;
+  }
+
+  const appShell = await caches.match("/");
+  if (appShell) return appShell;
+
+  return new Response(OFFLINE_HTML, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
 }
 
 self.addEventListener("install", (event) => {
@@ -98,22 +125,33 @@ self.addEventListener("fetch", (event) => {
 
       try {
         if (isNavigationRequest(request)) {
-          return await networkFirstNavigation(request);
+          return networkFirstNavigation(request);
         }
 
         if (shouldBypassCache(request)) {
-          return await fetch(request);
+          return fetchOrFallback(request, {
+            context: "bypass fetch failed",
+            // Cross-origin CSP denials are expected in some environments; avoid noisy logs.
+            logOnError: !isCrossOriginRequest(request),
+            fallbackResponse: Response.error(),
+          });
         }
 
         if (!isSafeStaticRequest(request)) {
-          return await fetch(request);
+          return fetchOrFallback(request, {
+            context: "non-cacheable fetch failed",
+            fallbackResponse: Response.error(),
+          });
         }
 
         const hit = await caches.match(request);
         if (hit) return hit;
 
-        const res = await fetch(request);
-        if (!res || res.status !== 200) return res;
+        const res = await fetchOrFallback(request, {
+          context: "cacheable fetch failed",
+          fallbackResponse: Response.error(),
+        });
+        if (!res || res.type === "error" || res.status !== 200) return res;
 
         const contentType = (res.headers.get("content-type") || "").toLowerCase();
         if (contentType.includes("application/json") || contentType.includes("text/html")) return res;
@@ -123,14 +161,9 @@ self.addEventListener("fetch", (event) => {
         return res;
       } catch (error) {
         logError("fetch handler failed", request.url, error);
-
         const cached = await caches.match(request);
         if (cached) return cached;
-
-        return new Response("Service unavailable", {
-          status: 503,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
+        return Response.error();
       }
     })()
   );
