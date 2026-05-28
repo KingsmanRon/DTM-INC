@@ -6,7 +6,16 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth/redirect";
-import { PROFILE_LOAD_ERROR_MESSAGE, sessionFromProfile, type AppProfileRow } from "@/lib/auth/profile";
+import {
+  APP_PROFILE_QUERY_DESCRIPTION,
+  APP_PROFILE_SELECT,
+  PROFILE_API_UNAVAILABLE_ERROR_MESSAGE,
+  getProfileFailureReason,
+  profileFailureMessage,
+  profileFromQueryRow,
+  sessionFromProfile,
+  type AppProfileQueryRow,
+} from "@/lib/auth/profile";
 
 // Next 15 static-prerenders this route by default. useSearchParams() is a
 // client-only hook that has no value at prerender time, so the caller must
@@ -64,29 +73,87 @@ function LoginForm() {
         return;
       }
 
-      // Validate the staff profile before redirecting. This intentionally uses
-      // the authenticated user's Supabase client and the get_my_app_profile RPC,
-      // not service_role and not the slow embedded app_users -> roles join.
-      const { data: profileRows, error: profileError } = await supabase.rpc("get_my_app_profile");
-      const profile = Array.isArray(profileRows)
-        ? (profileRows[0] as AppProfileRow | undefined) ?? null
-        : null;
+      // Validate the staff profile before redirecting. This uses the
+      // authenticated user's Supabase client under RLS, filters by the Auth
+      // user id (not email), and expects public.app_users.id = auth.users.id.
+      const profileQueryTarget = {
+        ...APP_PROFILE_QUERY_DESCRIPTION,
+        authenticatedUserId: data.user.id,
+        authenticatedEmail: data.user.email ?? email,
+        select: APP_PROFILE_SELECT,
+      };
+      const profileRequestPath =
+        `/rest/v1/app_users?select=${encodeURIComponent(APP_PROFILE_SELECT)}&id=eq.${encodeURIComponent(data.user.id)}`;
 
-      if (profileError || !sessionFromProfile(profile)) {
-        if (debugAuth) {
-          console.info("[auth-login-profile]", {
-            rpcCallSucceeded: !profileError,
-            profileFound: Boolean(profile),
-            profileStatus: profile?.status ?? null,
-            roleName: profile?.role_name ?? null,
-            errorMessage: profileError?.message ?? null,
-          });
-        }
+      console.info("[auth-login-profile] profile lookup started", {
+        request: profileRequestPath,
+        target: profileQueryTarget,
+      });
+
+      const profileTimeoutMs = 10000;
+      let profile: ReturnType<typeof profileFromQueryRow> = null;
+      let profileError: { code?: string; message?: string; details?: string; hint?: string } | null = null;
+      let profileTimedOut = false;
+
+      let profileTimeoutId: number | null = null;
+      try {
+        const profileQuery = supabase
+          .from("app_users")
+          .select(APP_PROFILE_SELECT)
+          .eq("id", data.user.id)
+          .maybeSingle();
+        const timeout = new Promise<never>((_, reject) => {
+          profileTimeoutId = window.setTimeout(
+            () => reject(new Error(`profile lookup timed out after ${profileTimeoutMs}ms`)),
+            profileTimeoutMs,
+          );
+        });
+        const { data: profileRow, error: lookupError } = await Promise.race([profileQuery, timeout]);
+
+        profileError = lookupError;
+        profile = profileFromQueryRow((profileRow as AppProfileQueryRow | null) ?? null);
+      } catch (lookupError) {
+        profileTimedOut = lookupError instanceof Error && lookupError.message.includes("timed out");
+        profileError = {
+          message: lookupError instanceof Error ? lookupError.message : String(lookupError),
+        };
+      } finally {
+        if (profileTimeoutId !== null) window.clearTimeout(profileTimeoutId);
+      }
+
+      const profileFailureReason = getProfileFailureReason(profile);
+      const profileLookupFailed = Boolean(profileError);
+
+      console.info("[auth-login-profile] profile lookup completed", {
+        request: profileRequestPath,
+        target: profileQueryTarget,
+        succeeded: !profileLookupFailed,
+        timedOut: profileTimedOut,
+        profileFound: Boolean(profile),
+        missingAppUserRow: !profileError && !profile,
+        profileStatus: profile?.status ?? null,
+        roleName: profile?.role_name ?? null,
+        failureReason: profileError ? "query_failed" : profileFailureReason,
+        supabaseError: profileError
+          ? {
+              code: profileError.code ?? null,
+              message: profileError.message ?? null,
+              details: profileError.details ?? null,
+              hint: profileError.hint ?? null,
+            }
+          : null,
+      });
+
+      if (profileError || profileFailureReason || !sessionFromProfile(profile)) {
         await supabase.auth.signOut().catch((signOutError) => {
           console.error("[auth-login-profile] signOut after profile failure failed", signOutError);
         });
         setBusy(false);
-        setError(PROFILE_LOAD_ERROR_MESSAGE);
+        setError(
+          profileError
+            ? PROFILE_API_UNAVAILABLE_ERROR_MESSAGE
+            : profileFailureMessage(profileFailureReason ?? "missing"),
+        );
         return;
       }
 
