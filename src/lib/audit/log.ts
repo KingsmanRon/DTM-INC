@@ -60,10 +60,27 @@ const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
 const AUDIT_TIMEOUT_BUDGET_MS = 4000;
-const OUTBOX_DRAIN_MIN_INTERVAL_MS = 60_000;
+
+// Outbox draining runs ONLY from the scheduled cron
+// (/api/v1/internal/drain-audit-outbox) — never opportunistically from a
+// request handler. The previous in-request drain fanned out service_role REST
+// calls from every serverless instance; the in-memory rate-limit could not
+// bound it because module state resets on each cold start, so a stuck outbox
+// turned a transient audit outage into database-CPU exhaustion. Cross-instance
+// safety now comes from a DB lease (try_acquire_maintenance_lock), not from
+// module-level variables.
+const OUTBOX_DRAIN_BATCH = 50; // rows fetched per query
+const OUTBOX_DRAIN_MAX_PER_RUN = 1000; // hard ceiling of attempts per cron run
+const OUTBOX_DEAD_LETTER_AFTER = 10; // stop retrying an event after N failures
+const OUTBOX_DRAIN_LOCK_TTL_S = 120; // lease length for one drain run
+
+// Soft, per-instance latency guard: when write_audit_entry is failing we stop
+// hammering it for 10s on THIS instance. This is an optimisation, not the
+// amplification guard — that is the removal of the in-request drain (above).
+// Each request's synchronous write is already bounded (MAX_TRANSIENT_RETRIES
+// then enqueue), so it never fans out regardless of this flag.
 let auditCircuitOpenUntil = 0;
 let outboxDrainInFlight = false;
-let nextOutboxDrainAt = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -93,48 +110,94 @@ async function enqueueAudit(input: AuditInput, reason: string): Promise<void> {
   }
 }
 
-function scheduleOutboxDrain(): void {
-  // Opportunistic drain is intentionally rate-limited. When Supabase is degraded,
-  // every drain attempt uses the service-role REST API; retrying it from each
-  // request can amplify a transient audit outage into database CPU exhaustion.
-  const now = Date.now();
-  if (outboxDrainInFlight || now < nextOutboxDrainAt || now < auditCircuitOpenUntil) return;
-  nextOutboxDrainAt = now + OUTBOX_DRAIN_MIN_INTERVAL_MS;
-  void drainAuditOutbox();
-}
+export type OutboxDrainSummary = {
+  processed: number;
+  dead_lettered: number;
+  attempted: number;
+  acquired_lock: boolean;
+};
 
-async function drainAuditOutbox(): Promise<void> {
-  if (outboxDrainInFlight) return;
-  if (Date.now() < auditCircuitOpenUntil) return;
+// Drains queued audit events into the hash-chained log. Invoked ONLY by the
+// scheduled cron (see /api/v1/internal/drain-audit-outbox). A DB lease ensures
+// at most one drain runs across all serverless instances at a time; work is
+// processed in bounded batches with a hard per-run ceiling; events that keep
+// failing are dead-lettered so they are never retried in an unbounded loop.
+export async function drainAuditOutbox(): Promise<OutboxDrainSummary> {
+  const summary: OutboxDrainSummary = { processed: 0, dead_lettered: 0, attempted: 0, acquired_lock: false };
+  if (outboxDrainInFlight) return summary; // cheap same-instance reentrancy guard
   outboxDrainInFlight = true;
-  try {
-    const admin = getSupabaseAdmin();
-    const { data, error } = await admin
-      .from("audit_log_outbox")
-      .select("id, payload_json, attempt_count")
-      .is("processed_at", null)
-      .lte("available_at", new Date().toISOString())
-      .order("created_at", { ascending: true })
-      .limit(10);
-    if (error || !data?.length) return;
+  const admin = getSupabaseAdmin();
 
-    for (const item of data) {
-      const input = item.payload_json as AuditInput;
-      const ok = await writeAuditImmediate(input);
-      if (ok) {
-        await admin.from("audit_log_outbox").update({ processed_at: new Date().toISOString(), last_error: null }).eq("id", item.id);
-      } else {
-        const attempts = (item.attempt_count ?? 0) + 1;
-        await admin.from("audit_log_outbox").update({
-          attempt_count: attempts,
-          last_error: "write_failed",
-          available_at: new Date(Date.now() + Math.min(30_000, attempts * 1_000)).toISOString(),
-        }).eq("id", item.id);
+  try {
+    // Cross-instance guard: skip this run if another drain holds the lease.
+    const { data: acquired, error: lockErr } = await admin.rpc("try_acquire_maintenance_lock", {
+      p_name: "outbox_drain",
+      p_ttl_seconds: OUTBOX_DRAIN_LOCK_TTL_S,
+    });
+    if (lockErr) {
+      console.error("[audit] drain lock acquire failed", { error: lockErr.message });
+      return summary;
+    }
+    if (acquired !== true) return summary;
+    summary.acquired_lock = true;
+
+    try {
+      while (summary.attempted < OUTBOX_DRAIN_MAX_PER_RUN) {
+        const { data, error } = await admin
+          .from("audit_log_outbox")
+          .select("id, payload_json, attempt_count")
+          .is("processed_at", null)
+          .is("dead_lettered_at", null)
+          .lte("available_at", new Date().toISOString())
+          .order("created_at", { ascending: true })
+          .limit(OUTBOX_DRAIN_BATCH);
+        if (error) {
+          console.error("[audit] drain select failed", { error: error.message });
+          break;
+        }
+        if (!data?.length) break;
+
+        for (const item of data) {
+          summary.attempted++;
+          const input = item.payload_json as AuditInput;
+          const ok = await writeAuditImmediate(input);
+          if (ok) {
+            await admin
+              .from("audit_log_outbox")
+              .update({ processed_at: new Date().toISOString(), last_error: null })
+              .eq("id", item.id);
+            summary.processed++;
+          } else {
+            const attempts = (item.attempt_count ?? 0) + 1;
+            if (attempts >= OUTBOX_DEAD_LETTER_AFTER) {
+              await admin
+                .from("audit_log_outbox")
+                .update({ attempt_count: attempts, dead_lettered_at: new Date().toISOString(), last_error: "dead_letter" })
+                .eq("id", item.id);
+              summary.dead_lettered++;
+            } else {
+              await admin
+                .from("audit_log_outbox")
+                .update({
+                  attempt_count: attempts,
+                  last_error: "write_failed",
+                  available_at: new Date(Date.now() + Math.min(30_000, attempts * 1_000)).toISOString(),
+                })
+                .eq("id", item.id);
+            }
+          }
+        }
+        if (data.length < OUTBOX_DRAIN_BATCH) break;
       }
+    } finally {
+      const { error: relErr } = await admin.rpc("release_maintenance_lock", { p_name: "outbox_drain" });
+      if (relErr) console.error("[audit] drain lock release failed", { error: relErr.message });
     }
   } finally {
     outboxDrainInFlight = false;
   }
+
+  return summary;
 }
 
 async function insertAuditRowFallback(
@@ -249,7 +312,9 @@ export async function writeAudit(input: AuditInput): Promise<void> {
     return;
   }
 
-  scheduleOutboxDrain();
+  // NOTE: we deliberately do NOT drain the outbox here. Draining is the cron's
+  // job (/api/v1/internal/drain-audit-outbox). Doing it per-request is what
+  // amplified service_role traffic into a database-CPU outage.
 
   const start = Date.now();
   for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {

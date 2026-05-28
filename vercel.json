@@ -5,6 +5,10 @@
     {
       "path": "/api/v1/internal/verify-audit-chain",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/v1/internal/drain-audit-outbox",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
