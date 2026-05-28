@@ -34,6 +34,12 @@ const PUBLIC_PATHS = new Set<string>([
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
+  // Internal cron/maintenance endpoints authenticate via CRON_SECRET inside the
+  // handler, not via a user session. Vercel Cron sends `Authorization: Bearer
+  // <CRON_SECRET>` and NO session cookie, so this middleware's getUser() gate
+  // would 401 them before the handler's secret check ever runs. Let them
+  // through; each handler enforces CRON_SECRET itself (401 without it).
+  if (pathname.startsWith("/api/v1/internal/")) return true;
   // /mfa/* requires AAL1 but not AAL2 — handled inside the page, not here.
   if (pathname.startsWith("/mfa/")) return false;
   return pathname.startsWith("/_next") || pathname.startsWith("/brand") ||
