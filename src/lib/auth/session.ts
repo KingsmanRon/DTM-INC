@@ -7,19 +7,11 @@
 // silent refusal. Every denial emits an `access_denied` audit row so the
 // refusal is observable in /admin/audit.
 import { NextResponse } from "next/server";
-import { PostgrestError } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-
-export type AppRole = "doctor" | "staff" | "admin";
-
-export type Session = {
-  userId: string;
-  email: string;
-  fullName: string;
-  role: AppRole;
-};
+import { sessionFromProfile, type AppProfileRow, type AppRole, type Session } from "@/lib/auth/profile";
+export type { AppRole, Session } from "@/lib/auth/profile";
 
 export class AuthError extends Error {
   constructor(public readonly code: "unauthenticated" | "forbidden") {
@@ -27,63 +19,29 @@ export class AuthError extends Error {
   }
 }
 
-const SESSION_RESOLVE_RETRIES = 2;
-const SESSION_RETRY_BACKOFF_MS = 120;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isTransientDbError(error: PostgrestError | null): boolean {
-  if (!error) return false;
-  const m = (error.message ?? "").toLowerCase();
-  return m.includes("timeout") || m.includes("temporar") || m.includes("upstream") || m.includes("fetch");
-}
-
 export async function resolveSession(): Promise<Session | null> {
   const supabase = await getSupabaseServer();
 
-  for (let attempt = 0; attempt <= SESSION_RESOLVE_RETRIES; attempt++) {
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr) {
-      const msg = (userErr.message ?? "").toLowerCase();
-      const transient = msg.includes("timeout") || msg.includes("temporar") || msg.includes("upstream") || msg.includes("fetch");
-      if (transient && attempt < SESSION_RESOLVE_RETRIES) {
-        await sleep(SESSION_RETRY_BACKOFF_MS * (attempt + 1));
-        continue;
-      }
-      console.error("[auth] getUser failed", { message: userErr.message });
-      return null;
-    }
-    if (!user) return null;
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr) {
+    console.error("[auth] getUser failed", { message: userErr.message });
+    return null;
+  }
+  if (!user) return null;
 
-    const { data: appUser, error } = await supabase
-      .from("app_users")
-      .select("id, email, full_name, status, roles:role_id(name)")
-      .eq("id", user.id)
-      .maybeSingle();
+  // Avoid the embedded PostgREST app_users -> roles join here. In production
+  // that relationship query can stall long enough to 504 login/dashboard
+  // resolution; this RPC performs the same lookup as a bounded SQL function
+  // under the caller's authenticated context, with no service_role key.
+  const { data, error } = await supabase.rpc("get_my_app_profile");
 
-    if (error && isTransientDbError(error) && attempt < SESSION_RESOLVE_RETRIES) {
-      await sleep(SESSION_RETRY_BACKOFF_MS * (attempt + 1));
-      continue;
-    }
-
-    if (error || !appUser || appUser.status !== "active") return null;
-
-    const roleRaw = Array.isArray(appUser.roles)
-      ? appUser.roles[0]?.name
-      : (appUser.roles as { name: AppRole } | null)?.name;
-    if (!roleRaw) return null;
-
-    return {
-      userId: appUser.id,
-      email: appUser.email,
-      fullName: appUser.full_name,
-      role: roleRaw as AppRole,
-    };
+  if (error) {
+    console.error("[auth] get_my_app_profile failed", { message: error.message });
+    return null;
   }
 
-  return null;
+  const appUser = Array.isArray(data) ? (data[0] as AppProfileRow | undefined) ?? null : null;
+  return sessionFromProfile(appUser);
 }
 
 export async function requireSession(): Promise<Session> {

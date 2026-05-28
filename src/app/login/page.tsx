@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth/redirect";
+import { PROFILE_LOAD_ERROR_MESSAGE, sessionFromProfile, type AppProfileRow } from "@/lib/auth/profile";
 
 // Next 15 static-prerenders this route by default. useSearchParams() is a
 // client-only hook that has no value at prerender time, so the caller must
@@ -38,31 +39,64 @@ function LoginForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const supabase = getSupabaseBrowser();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    const hasSession = Boolean(data.session);
-    const hasUser = Boolean(data.user);
-    const safeNextRoute = next;
 
-    if (debugAuth) {
-      console.info("[auth-login]", {
-        tokenCallSucceeded: !error,
-        hasSession,
-        hasUser,
-        userId: data.user?.id ?? null,
-        nextRoute: safeNextRoute,
-        errorMessage: error?.message ?? null,
-      });
-    }
+    try {
+      const supabase = getSupabaseBrowser();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const hasSession = Boolean(data.session);
+      const hasUser = Boolean(data.user);
+      const safeNextRoute = next;
 
-    if (error || !hasSession || !hasUser) {
+      if (debugAuth) {
+        console.info("[auth-login]", {
+          tokenCallSucceeded: !error,
+          hasSession,
+          hasUser,
+          userId: data.user?.id ?? null,
+          nextRoute: safeNextRoute,
+          errorMessage: error?.message ?? null,
+        });
+      }
+
+      if (error || !hasSession || !hasUser) {
+        setBusy(false);
+        setError(error?.message ?? "Sign-in succeeded, but no active session was established.");
+        return;
+      }
+
+      // Validate the staff profile before redirecting. This intentionally uses
+      // the authenticated user's Supabase client and the get_my_app_profile RPC,
+      // not service_role and not the slow embedded app_users -> roles join.
+      const { data: profileRows, error: profileError } = await supabase.rpc("get_my_app_profile");
+      const profile = Array.isArray(profileRows)
+        ? (profileRows[0] as AppProfileRow | undefined) ?? null
+        : null;
+
+      if (profileError || !sessionFromProfile(profile)) {
+        if (debugAuth) {
+          console.info("[auth-login-profile]", {
+            rpcCallSucceeded: !profileError,
+            profileFound: Boolean(profile),
+            profileStatus: profile?.status ?? null,
+            roleName: profile?.role_name ?? null,
+            errorMessage: profileError?.message ?? null,
+          });
+        }
+        await supabase.auth.signOut().catch((signOutError) => {
+          console.error("[auth-login-profile] signOut after profile failure failed", signOutError);
+        });
+        setBusy(false);
+        setError(PROFILE_LOAD_ERROR_MESSAGE);
+        return;
+      }
+
+      router.replace(safeNextRoute);
+      router.refresh();
+    } catch (err) {
+      console.error("[auth-login] unexpected sign-in failure", err);
       setBusy(false);
-      setError(error?.message ?? "Sign-in succeeded, but no active session was established.");
-      return;
+      setError("Sign-in failed. Please try again.");
     }
-
-    router.replace(safeNextRoute);
-    router.refresh();
   }
 
   return (
