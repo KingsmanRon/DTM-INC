@@ -8,7 +8,7 @@
     },
     {
       "path": "/api/v1/internal/drain-audit-outbox",
-      "schedule": "*/15 * * * *"
+      "schedule": "30 2 * * *"
     }
   ]
 }
