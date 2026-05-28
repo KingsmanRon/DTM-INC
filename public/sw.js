@@ -89,6 +89,23 @@ async function networkFirstNavigation(request) {
   });
 }
 
+async function cacheFirstShellAsset(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(request);
+    if (response.ok && response.type === "basic") {
+      const clone = response.clone();
+      caches.open(CACHE).then((c) => c.put(request, clone)).catch((error) => logError("cache put failed", error));
+    }
+    return response;
+  } catch (error) {
+    logError("shell asset fetch failed", request.url, error);
+    return Response.error();
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL_URLS)).catch((error) => logError("install cache failed", error)));
   self.skipWaiting();
@@ -107,59 +124,24 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  // Only same-origin GET requests are eligible for SW handling. Everything else
-  // — cross-origin (Google Fonts, Supabase, …) and non-GET — is left to the
-  // browser by NOT calling respondWith(). A SW fetch() is governed by the CSP
-  // connect-src directive, whereas the browser's native loads use
-  // style-src/font-src/img-src. Re-fetching the cross-origin font stylesheet
-  // here was blocked by connect-src and returned a network error, crashing the
-  // app; passing it through lets style-src allow it.
+  // Non-GET and cross-origin requests are never intercepted. A cross-origin
+  // fetch() inside a SW is governed by the CSP connect-src directive, which
+  // would block e.g. the Google Fonts stylesheet; letting the browser load it
+  // natively keeps it under style-src/font-src instead.
   if (request.method !== "GET" || isCrossOriginRequest(request)) return;
 
-  event.respondWith(
-    (async () => {
-      try {
-        if (isNavigationRequest(request)) {
-          return networkFirstNavigation(request);
-        }
+  // Top-level navigations: network-first with an offline fallback page.
+  if (isNavigationRequest(request)) {
+    event.respondWith(networkFirstNavigation(request));
+    return;
+  }
 
-        if (shouldBypassCache(request)) {
-          return fetchOrFallback(request, {
-            context: "bypass fetch failed",
-            allowCacheFallback: false,
-            fallbackResponse: Response.error(),
-          });
-        }
+  // Anything that isn't a cacheable shell asset — RSC payloads, _next chunks,
+  // API calls, sensitive routes, redirecting routes like "/" — is left to the
+  // browser. Synthesising Response.error() for these turned recoverable
+  // failures (a transient blip, a redirect the SW can't replay) into hard
+  // render crashes and blank pages.
+  if (shouldBypassCache(request) || !isSafeStaticRequest(request)) return;
 
-        if (!isSafeStaticRequest(request)) {
-          return fetchOrFallback(request, {
-            context: "non-cacheable fetch failed",
-            allowCacheFallback: false,
-            fallbackResponse: Response.error(),
-          });
-        }
-
-        const hit = await caches.match(request);
-        if (hit) return hit;
-
-        const res = await fetchOrFallback(request, {
-          context: "cacheable fetch failed",
-          fallbackResponse: Response.error(),
-        });
-        if (!res || res.type === "error" || res.status !== 200) return res;
-
-        const contentType = (res.headers.get("content-type") || "").toLowerCase();
-        if (contentType.includes("application/json") || contentType.includes("text/html")) return res;
-
-        const clone = res.clone();
-        caches.open(CACHE).then((c) => c.put(request, clone)).catch((error) => logError("cache put failed", error));
-        return res;
-      } catch (error) {
-        logError("fetch handler failed", request.url, error);
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        return Response.error();
-      }
-    })()
-  );
+  event.respondWith(cacheFirstShellAsset(request));
 });
