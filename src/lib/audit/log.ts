@@ -68,6 +68,11 @@ const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
 const AUDIT_TIMEOUT_BUDGET_MS = 4000;
+// Backoff between tail-collision retries. Previously these retried with NO
+// delay, so under lock contention write_audit_entry was hammered in a tight
+// loop — a rapid RPC storm a small instance cannot absorb. A short increasing
+// delay spreads them out; a held lock is failed fast instead (see below).
+const AUDIT_TAIL_RETRY_BACKOFF_MS = 60;
 
 // Outbox draining runs ONLY from the scheduled cron
 // (/api/v1/internal/drain-audit-outbox) — never opportunistically from a
@@ -290,10 +295,27 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
 
     if (!error) return true;
 
-    // 40001 = tail moved between our read and the function's re-check.
-    // Re-read and recompute with the new tail; do not throw into user flow.
     const code = (error as { code?: string }).code;
-    if (code === "40001") continue;
+    const message = (error as { message?: string }).message ?? "";
+
+    // write_audit_entry raises 40001 for two distinct reasons:
+    //   * "lock busy" — pg_try_advisory_xact_lock could not take the chain lock
+    //     (contention, or a session stuck holding it). Retrying in a tight loop
+    //     just hammers a lock that will not free in microseconds; on a small
+    //     instance that storms the DB. Fail fast and let the caller degrade —
+    //     the synchronous path opens its circuit + enqueues to the outbox, and
+    //     the drain defers the item to its next run.
+    //   * "tail moved" — a concurrent write advanced the chain tail between our
+    //     read and the function's re-check. Legitimate; worth a brief, backed-
+    //     off retry with a freshly-read tail.
+    if (code === "40001") {
+      if (message.includes("lock busy")) {
+        console.warn("[audit] chain lock busy — deferring to outbox", { action: input.action });
+        return false;
+      }
+      await sleep(AUDIT_TAIL_RETRY_BACKOFF_MS * (attempt + 1));
+      continue;
+    }
 
     if (code === "42501") {
       const ok = await insertAuditRowFallback(row, entryHash, hasServiceRoleKey);
