@@ -30,7 +30,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
           </p>
         </div>
         <div className="flex gap-2">
-          <PrintCurrentFileButton />
+          <PrintCurrentFileButton pdfHref={`/api/v1/patients/${id}/onboarding-pdf?disposition=inline`} />
           <Link
             href={`/api/v1/patients/${id}/onboarding-pdf`}
             className="btn-secondary"

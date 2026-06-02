@@ -66,11 +66,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       userAgent: req.headers.get("user-agent"),
     });
 
+    const disposition = req.nextUrl.searchParams.get("disposition") === "inline" ? "inline" : "attachment";
+
     return new Response(new Uint8Array(pdf), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="onboarding-${patientRes.data.file_number}.pdf"`,
+        "Content-Disposition": `${disposition}; filename="onboarding-${patientRes.data.file_number}.pdf"`,
         "Cache-Control": "no-store",
         "X-Content-SHA256": sha256,
       },
