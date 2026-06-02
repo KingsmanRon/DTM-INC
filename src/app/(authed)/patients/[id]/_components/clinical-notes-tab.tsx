@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+
+const InkCanvas = dynamic(() => import("./ink-canvas"), { ssr: false });
 
 type Note = {
   id: string;
   note_date: string;
   body: string;
+  ink: string | null;
   is_finalised: boolean;
   amended_from_note_id: string | null;
   created_at: string;
@@ -21,9 +25,11 @@ type Note = {
 // supersedes the original via amended_from_note_id; the original is
 // auto-finalised by the API. The chain is rendered with a "Supersedes"
 // label on the new note and a "Superseded" badge on the original.
-export function ClinicalNotesTab({ patientId }: { patientId: string }) {
+export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patientId: string; handwrittenNotesEnabled: boolean }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [body, setBody] = useState("");
+  const [ink, setInk] = useState<string | null>(null);
+  const [showInkCanvas, setShowInkCanvas] = useState(false);
   const [noteDate, setNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -62,14 +68,14 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [patientId]);
 
   async function onAdd() {
-    if (!body.trim()) return;
+    if (!body.trim() && !ink) return;
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ note_date: noteDate, body }),
+      body: JSON.stringify({ note_date: noteDate, body: body || undefined, ink: ink ?? undefined }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -78,6 +84,8 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
       return;
     }
     setBody("");
+    setInk(null);
+    setShowInkCanvas(false);
     await refresh();
   }
 
@@ -143,7 +151,16 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
-        <button className="btn-primary" disabled={busy || !body.trim()} onClick={onAdd}>
+        {handwrittenNotesEnabled ? (
+          <div className="space-y-2">
+            <button type="button" className="btn-secondary text-xs" onClick={() => setShowInkCanvas((shown) => !shown)}>
+              {showInkCanvas ? "Hide handwriting canvas" : "Add handwriting"}
+            </button>
+            {showInkCanvas ? <InkCanvas onDone={(value) => { setInk(value); setShowInkCanvas(false); }} /> : null}
+            {ink ? <p className="text-sm text-state-success">Handwritten draft attached.</p> : null}
+          </div>
+        ) : null}
+        <button className="btn-primary" disabled={busy || (!body.trim() && !ink)} onClick={onAdd}>
           {busy ? "Saving…" : "Save note"}
         </button>
         {error ? <p className="text-state-danger text-sm">{error}</p> : null}
@@ -178,10 +195,10 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
                   ) : null}
                 </div>
                 <div className="flex gap-2">
-                  {!n.is_finalised && !editing && (
+                  {!n.ink && !n.is_finalised && !editing && (
                     <button className="btn-secondary text-xs" onClick={() => onFinalise(n.id)}>Finalise</button>
                   )}
-                  {!isSuperseded && !editing && (
+                  {!n.ink && !isSuperseded && !editing && (
                     <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
                   )}
                 </div>
@@ -220,7 +237,10 @@ export function ClinicalNotesTab({ patientId }: { patientId: string }) {
                   </div>
                 </div>
               ) : (
-                <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre>
+                <div className="space-y-2">
+                  {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
+                  {n.ink ? <p className="text-sm text-text-secondary">Handwritten draft attached. Finalise and PDF export remain disabled during this rollout stage.</p> : null}
+                </div>
               )}
             </div>
           );

@@ -40,12 +40,13 @@ export async function POST(
 
     const { data: source, error: sourceErr } = await admin
       .from("clinical_notes")
-      .select("id, patient_id, dek_id, is_finalised")
+      .select("id, patient_id, dek_id, is_finalised, encrypted_ink")
       .eq("id", noteId)
       .eq("patient_id", id)
       .maybeSingle();
     if (sourceErr) return jsonError(500, "db_error", sourceErr.message);
     if (!source) return jsonError(404, "not_found");
+    if (source.encrypted_ink) return jsonError(409, "handwritten_amend_disabled", "Handwritten notes remain drafts during this rollout stage.");
 
     const { data: alreadyAmended } = await admin
       .from("clinical_notes")
