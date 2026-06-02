@@ -121,3 +121,8 @@ export function decryptNoteBody(dek: Buffer, ciphertext: Buffer, nonce: Buffer):
 export function zero(buf: Buffer): void {
   buf.fill(0);
 }
+
+// Ink JSON is encrypted separately, but with the same patient DEK path as the
+// typed body. Separate nonces ensure AES-GCM never reuses a nonce/key pair.
+export const encryptNoteInk = encryptNoteBody;
+export const decryptNoteInk = decryptNoteBody;

@@ -142,6 +142,10 @@ See [`.env.example`](./.env.example). Production must never include a `.env` fil
 | `CLINICAL_NOTES_KEY_PROVIDER` | `vault` (recommended) or `dev` |
 | `ALLOW_DEV_KEK_FALLBACK` | `true`/`false` fallback to dev key if Vault read fails |
 | `CLINICAL_NOTES_KEK_DEV_KEY` | Base64 32-byte emergency fallback key |
+| `FEATURE_HANDWRITTEN_NOTES` | Server-side handwriting master flag; default `false` |
+| `FEATURE_HANDWRITTEN_NOTES_DOCTOR_IDS` | Comma-separated allowlisted doctor UUIDs; default empty |
+| `FEATURE_HANDWRITTEN_NOTES_FINALISE` | Future handwritten-finalise gate; keep `false` through Release 4 |
+| `FEATURE_HANDWRITTEN_NOTES_PDF` | Future handwritten-PDF gate; keep `false` through Release 4 |
 
 ---
 
