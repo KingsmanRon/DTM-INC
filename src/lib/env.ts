@@ -1,6 +1,8 @@
 // Env validation. Fail at boot with a clear message rather than NPE at request time.
 import { z } from "zod";
 
+const EnvBoolean = z.enum(["true", "false"]).default("false").transform((value) => value === "true");
+
 const ServerEnv = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20),
@@ -17,6 +19,10 @@ const ServerEnv = z.object({
   SESSION_IDLE_TIMEOUT_DOCTOR_MIN: z.coerce.number().default(15),
   SESSION_IDLE_TIMEOUT_ADMIN_MIN: z.coerce.number().default(15),
   PDF_SERVICE_SHARED_SECRET: z.string().optional(),
+  FEATURE_HANDWRITTEN_NOTES: EnvBoolean,
+  FEATURE_HANDWRITTEN_NOTES_DOCTOR_IDS: z.string().default(""),
+  FEATURE_HANDWRITTEN_NOTES_FINALISE: EnvBoolean,
+  FEATURE_HANDWRITTEN_NOTES_PDF: EnvBoolean,
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 }).superRefine((env, ctx) => {
   if (env.SUPABASE_SERVICE_ROLE_KEY === env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {

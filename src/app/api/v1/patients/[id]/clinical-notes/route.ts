@@ -4,10 +4,12 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer, getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import {
-  encryptNoteBody, decryptNoteBody, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
+  encryptNoteBody, decryptNoteBody, encryptNoteInk, decryptNoteInk, generateDek, wrapDek, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
 import { byteaToCryptoBuffer, cryptoBufferToBase64 } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
+import { canUseHandwrittenNotes } from "@/lib/clinical-notes/features";
+import { parseInkPayload } from "@/lib/clinical-notes/ink";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +20,12 @@ export const dynamic = "force-dynamic";
 
 const NoteCreate = z.object({
   note_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  body: z.string().min(1).max(50_000),
+  body: z.string().max(50_000).optional(),
+  ink: z.string().optional(),
+}).superRefine((input, ctx) => {
+  if (!input.body?.trim() && !input.ink) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A note must contain typed text or ink." });
+  }
 });
 
 class PatientNotFoundError extends Error {
@@ -89,7 +96,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { data: notes, error } = await supabase
       .from("clinical_notes")
-      .select("id, patient_id, author_user_id, note_date, encrypted_body, nonce, dek_id, is_finalised, finalised_at, amended_from_note_id, created_at, updated_at")
+      .select("id, patient_id, author_user_id, note_date, encrypted_body, nonce, encrypted_ink, ink_nonce, dek_id, is_finalised, finalised_at, amended_from_note_id, created_at, updated_at")
       .eq("patient_id", id)
       .order("created_at", { ascending: false });
     if (error) {
@@ -98,7 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Decrypt each note. All notes under a patient share the same DEK.
-    const results: Array<{ id: string; note_date: string; body: string; is_finalised: boolean; amended_from_note_id: string | null; created_at: string; updated_at: string }> = [];
+    const results: Array<{ id: string; note_date: string; body: string; ink: string | null; is_finalised: boolean; amended_from_note_id: string | null; created_at: string; updated_at: string }> = [];
     if (notes && notes.length > 0) {
       let dekHandle: { dek: Buffer } | null = null;
       try {
@@ -112,12 +119,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const { dek } = dekHandle;
       try {
         for (const n of notes) {
-          const ct = byteaToCryptoBuffer(n.encrypted_body);
-          const nonce = byteaToCryptoBuffer(n.nonce);
+          const body = n.encrypted_body && n.nonce
+            ? decryptNoteBody(dek, byteaToCryptoBuffer(n.encrypted_body), byteaToCryptoBuffer(n.nonce))
+            : "";
+          const ink = n.encrypted_ink && n.ink_nonce
+            ? decryptNoteInk(dek, byteaToCryptoBuffer(n.encrypted_ink), byteaToCryptoBuffer(n.ink_nonce))
+            : null;
           results.push({
             id: n.id,
             note_date: n.note_date,
-            body: decryptNoteBody(dek, ct, nonce),
+            body,
+            ink,
             is_finalised: n.is_finalised,
             amended_from_note_id: n.amended_from_note_id,
             created_at: n.created_at,
@@ -152,6 +164,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const session = await requireRole("doctor");
     const { id } = await params;
     const input = await parseJson(req, NoteCreate);
+    if (input.ink) {
+      if (!canUseHandwrittenNotes(session.userId)) return jsonError(404, "not_found");
+      try { parseInkPayload(input.ink); } catch (error) {
+        const code = (error as Error).message;
+        return jsonError(code === "ink_too_large" ? 413 : 400, code);
+      }
+    }
 
     let dekHandle: { dekId: string; dek: Buffer };
     try {
@@ -165,7 +184,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { dekId, dek } = dekHandle;
     let noteId: string | null = null;
     try {
-      const { ciphertext, nonce } = encryptNoteBody(dek, input.body);
+      const encryptedBody = input.body?.trim() ? encryptNoteBody(dek, input.body) : null;
+      const encryptedInk = input.ink ? encryptNoteInk(dek, input.ink) : null;
 
       const admin = getSupabaseAdmin();
       const { data, error } = await admin
@@ -174,8 +194,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           patient_id: id,
           author_user_id: session.userId,
           note_date: input.note_date ?? new Date().toISOString().slice(0, 10),
-          encrypted_body: cryptoBufferToBase64(ciphertext),
-          nonce: cryptoBufferToBase64(nonce),
+          encrypted_body: encryptedBody ? cryptoBufferToBase64(encryptedBody.ciphertext) : null,
+          nonce: encryptedBody ? cryptoBufferToBase64(encryptedBody.nonce) : null,
+          encrypted_ink: encryptedInk ? cryptoBufferToBase64(encryptedInk.ciphertext) : null,
+          ink_nonce: encryptedInk ? cryptoBufferToBase64(encryptedInk.nonce) : null,
           dek_id: dekId,
         })
         .select("id")

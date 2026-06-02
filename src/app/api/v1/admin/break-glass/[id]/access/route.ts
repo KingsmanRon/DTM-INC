@@ -112,12 +112,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const dek = await unwrapDek(wrapped);
       try {
         for (const n of notes) {
-          const ct = byteaToCryptoBuffer(n.encrypted_body);
-          const nonce = byteaToCryptoBuffer(n.nonce);
+          const body = n.encrypted_body && n.nonce
+            ? decryptNoteBody(dek, byteaToCryptoBuffer(n.encrypted_body), byteaToCryptoBuffer(n.nonce))
+            : "";
           results.push({
             id: n.id,
             note_date: n.note_date,
-            body: decryptNoteBody(dek, ct, nonce),
+            body,
             is_finalised: n.is_finalised,
             created_at: n.created_at,
           });

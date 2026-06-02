@@ -3,6 +3,8 @@ import Link from "next/link";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { PatientTabs } from "./_components/patient-tabs";
+import { PrintCurrentFileButton } from "@/components/PrintCurrentFileButton";
+import { canUseHandwrittenNotes } from "@/lib/clinical-notes/features";
 
 export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await resolveSession();
@@ -28,6 +30,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
           </p>
         </div>
         <div className="flex gap-2">
+          <PrintCurrentFileButton />
           <Link
             href={`/api/v1/patients/${id}/onboarding-pdf`}
             className="btn-secondary"
@@ -40,7 +43,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
       </header>
 
       {/* role is passed so the Clinical Notes tab only renders for doctors. */}
-      <PatientTabs patientId={id} role={session.role} />
+      <PatientTabs patientId={id} role={session.role} handwrittenNotesEnabled={session.role === "doctor" && canUseHandwrittenNotes(session.userId)} />
     </div>
   );
 }
