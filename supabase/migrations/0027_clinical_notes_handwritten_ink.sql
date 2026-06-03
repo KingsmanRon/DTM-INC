@@ -27,6 +27,28 @@ alter table clinical_notes
   drop constraint if exists clinical_notes_body_pair,
   drop constraint if exists clinical_notes_ink_pair;
 
+-- Pre-flight backfill guard. The body/nonce pairing CHECK below validates
+-- existing rows at ADD CONSTRAINT time. Every note written via encryptNoteBody
+-- carries both ciphertext and nonce, so this passes -- but a legacy/half-written
+-- row would otherwise abort the migration with an opaque constraint violation.
+-- Fail FIRST here with a clear, actionable message and no schema change. This
+-- block is read-only and safe to re-run. Especially relevant applying straight
+-- to production, where the constraint validates against real data, not fixtures.
+do $$
+declare
+  bad_count bigint;
+begin
+  select count(*) into bad_count
+  from clinical_notes
+  where (encrypted_body is not null and nonce is null)
+     or (encrypted_body is null and nonce is not null);
+
+  if bad_count > 0 then
+    raise exception
+      'Backfill blocker: % existing clinical_notes row(s) have encrypted_body and nonce out of sync; clinical_notes_body_nonce_paired would reject them. Populate the missing nonce (or investigate the row) before applying 0027. No schema change made.', bad_count;
+  end if;
+end $$;
+
 -- Integrity constraints validate existing rows during apply. Existing typed
 -- rows satisfy all three checks. Guard each constraint so a partial/retried
 -- migration apply remains safe.

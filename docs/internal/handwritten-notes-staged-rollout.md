@@ -43,8 +43,9 @@ FEATURE_HANDWRITTEN_NOTES_PDF=false
 
 A repository-wide search for `encrypted_body`, `nonce`, and `decryptNoteBody`
 found two decrypting read paths: the doctor clinical-notes GET route and the
-audited admin break-glass route. Both must remain null-safe before migration
-`0027` is applied. This repository does not currently include a clinical-note
+audited admin break-glass route. Both are null-safe and both now decrypt and
+return handwritten ink, so an emergency read of an ink-only note is not silently
+blank. This repository does not currently include a clinical-note
 patient-export decrypt path. Re-run that search whenever an export route is
 introduced.
 

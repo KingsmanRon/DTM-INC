@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decryptNoteInk, encryptNoteInk, generateDek, zero } from "@/lib/crypto/envelope";
-import { MAX_INK_BYTES, parseInkPayload } from "./ink";
+import { MAX_INK_BYTES, MAX_INK_PAGES, parseInkPayload } from "./ink";
 
 const ink = JSON.stringify({ version: 1, pages: [{ strokes: [[[12.25, 18.5, 0.4], [13, 19, 0.8]]] }] });
 
@@ -21,6 +21,11 @@ describe("handwritten clinical note ink", () => {
 
   it("rejects ink documents larger than the ink-specific limit", () => {
     expect(() => parseInkPayload("x".repeat(MAX_INK_BYTES + 1))).toThrow("ink_too_large");
+  });
+
+  it("rejects ink documents with more than the page cap", () => {
+    const pages = Array.from({ length: MAX_INK_PAGES + 1 }, () => ({ strokes: [[[0, 0, 0.5], [1, 1, 0.5]]] }));
+    expect(() => parseInkPayload(JSON.stringify({ version: 1, pages }))).toThrow("too_many_pages");
   });
 
   it("rejects empty ink documents", () => {
