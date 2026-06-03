@@ -21,7 +21,7 @@ import type { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-import { decryptNoteBody, unwrapDek, zero } from "@/lib/crypto/envelope";
+import { decryptNoteBody, decryptNoteInk, unwrapDek, zero } from "@/lib/crypto/envelope";
 import { byteaToCryptoBuffer } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk } from "@/lib/api/http";
 
@@ -101,11 +101,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const { data: notes } = await admin
       .from("clinical_notes")
-      .select("id, note_date, encrypted_body, nonce, is_finalised, amended_from_note_id, created_at, updated_at")
+      .select("id, note_date, encrypted_body, nonce, encrypted_ink, ink_nonce, is_finalised, amended_from_note_id, created_at, updated_at")
       .eq("patient_id", request.target_patient_id)
       .order("created_at", { ascending: false });
 
-    const results: Array<{ id: string; note_date: string; body: string; is_finalised: boolean; created_at: string }> = [];
+    const results: Array<{ id: string; note_date: string; body: string; ink: string | null; is_finalised: boolean; created_at: string }> = [];
 
     if (keyRow && notes && notes.length > 0) {
       const wrapped = byteaToCryptoBuffer(keyRow.wrapped_dek);
@@ -115,10 +115,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           const body = n.encrypted_body && n.nonce
             ? decryptNoteBody(dek, byteaToCryptoBuffer(n.encrypted_body), byteaToCryptoBuffer(n.nonce))
             : "";
+          // Handwritten ink rides on the same row + DEK. Decrypt it here too so
+          // an emergency read of an ink-only note isn't a silently blank note.
+          const ink = n.encrypted_ink && n.ink_nonce
+            ? decryptNoteInk(dek, byteaToCryptoBuffer(n.encrypted_ink), byteaToCryptoBuffer(n.ink_nonce))
+            : null;
           results.push({
             id: n.id,
             note_date: n.note_date,
             body,
+            ink,
             is_finalised: n.is_finalised,
             created_at: n.created_at,
           });

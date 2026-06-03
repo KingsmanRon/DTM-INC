@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import InkView from "./ink-view";
 
 const InkCanvas = dynamic(() => import("./ink-canvas"), { ssr: false });
 
@@ -239,7 +240,12 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patie
               ) : (
                 <div className="space-y-2">
                   {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
-                  {n.ink ? <p className="text-sm text-text-secondary">Handwritten draft attached. Finalise and PDF export remain disabled during this rollout stage.</p> : null}
+                  {n.ink ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-text-secondary">Handwritten note</p>
+                      <InkView ink={n.ink} />
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
