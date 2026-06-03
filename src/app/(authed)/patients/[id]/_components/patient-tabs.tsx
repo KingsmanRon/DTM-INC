@@ -15,7 +15,7 @@ const BASE_TABS = [
 
 type TabId = "demographics" | "documents" | "clinical";
 
-export function PatientTabs({ patientId, role, handwrittenNotesEnabled }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean }) {
+export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean }) {
   const [active, setActive] = useState<TabId>("demographics");
 
   const tabs = role === "doctor"
@@ -42,7 +42,7 @@ export function PatientTabs({ patientId, role, handwrittenNotesEnabled }: { pati
 
       {active === "demographics" && <DemographicsTab patientId={patientId} />}
       {active === "documents" && <DocumentsTab patientId={patientId} />}
-      {active === "clinical" && role === "doctor" && <ClinicalNotesTab patientId={patientId} handwrittenNotesEnabled={handwrittenNotesEnabled} />}
+      {active === "clinical" && role === "doctor" && <ClinicalNotesTab patientId={patientId} handwrittenNotesEnabled={handwrittenNotesEnabled} handwrittenFinaliseEnabled={handwrittenFinaliseEnabled} notesPdfEnabled={notesPdfEnabled} />}
     </div>
   );
 }

@@ -1,21 +1,12 @@
 "use client";
 
-import { pageBounds, strokePath, type InkPoint } from "./ink-render";
+import { pageBounds, strokePath, toStrokes, type InkPoint } from "./ink-render";
 
 // Read-only renderer for a saved handwritten note. Switches on the payload
 // `version`: a known version renders strokes; an unknown (newer) version shows
 // a visible fallback instead of throwing, so notes stay legible across years of
 // format evolution. Defensive parsing means a malformed note degrades to a
 // message rather than crashing the whole notes tab.
-function toStrokes(page: unknown): InkPoint[][] {
-  if (!page || typeof page !== "object") return [];
-  const strokes = (page as { strokes?: unknown }).strokes;
-  if (!Array.isArray(strokes)) return [];
-  return strokes.filter(
-    (s): s is InkPoint[] => Array.isArray(s) && s.every((p) => Array.isArray(p) && p.length >= 2),
-  );
-}
-
 type Parsed =
   | { kind: "ok"; pages: InkPoint[][][] }
   | { kind: "unsupported" }
