@@ -122,6 +122,25 @@ export function zero(buf: Buffer): void {
   buf.fill(0);
 }
 
+// Binary variants for non-text payloads (e.g. the rasterised PNG of a
+// handwritten note). Same AES-256-GCM envelope as the text helpers, but with no
+// utf8 round-trip so arbitrary bytes survive intact.
+export function encryptNoteBytes(dek: Buffer, data: Buffer): EncryptedNote {
+  const nonce = randomBytes(NONCE_BYTES);
+  const cipher = createCipheriv(ALGO, dek, nonce);
+  const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return { ciphertext: Buffer.concat([ct, tag]), nonce };
+}
+
+export function decryptNoteBytes(dek: Buffer, ciphertext: Buffer, nonce: Buffer): Buffer {
+  const tag = ciphertext.subarray(ciphertext.length - 16);
+  const ct = ciphertext.subarray(0, ciphertext.length - 16);
+  const decipher = createDecipheriv(ALGO, dek, nonce);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
+
 // Ink JSON is encrypted separately, but with the same patient DEK path as the
 // typed body. Separate nonces ensure AES-GCM never reuses a nonce/key pair.
 export const encryptNoteInk = encryptNoteBody;

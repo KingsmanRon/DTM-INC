@@ -4,7 +4,7 @@ import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { PatientTabs } from "./_components/patient-tabs";
 import { PrintCurrentFileButton } from "@/components/PrintCurrentFileButton";
-import { canUseHandwrittenNotes } from "@/lib/clinical-notes/features";
+import { canUseHandwrittenNotes, getHandwrittenNotesFeatures } from "@/lib/clinical-notes/features";
 
 export default async function PatientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await resolveSession();
@@ -17,6 +17,10 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
 
   const { data: patient, error } = await supabase.from("patients").select("*").eq("id", id).maybeSingle();
   if (error || !patient) notFound();
+
+  const isDoctor = session.role === "doctor";
+  const inkEnabled = isDoctor && canUseHandwrittenNotes(session.userId);
+  const features = getHandwrittenNotesFeatures();
 
   return (
     <div className="space-y-4">
@@ -43,7 +47,13 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
       </header>
 
       {/* role is passed so the Clinical Notes tab only renders for doctors. */}
-      <PatientTabs patientId={id} role={session.role} handwrittenNotesEnabled={session.role === "doctor" && canUseHandwrittenNotes(session.userId)} />
+      <PatientTabs
+        patientId={id}
+        role={session.role}
+        handwrittenNotesEnabled={inkEnabled}
+        handwrittenFinaliseEnabled={inkEnabled && features.finaliseEnabled}
+        notesPdfEnabled={isDoctor && features.pdfEnabled}
+      />
     </div>
   );
 }

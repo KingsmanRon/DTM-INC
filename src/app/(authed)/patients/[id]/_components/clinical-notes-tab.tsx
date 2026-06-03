@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import InkView from "./ink-view";
+import { rasterizeInkToPngBase64 } from "./ink-raster";
 
 const InkCanvas = dynamic(() => import("./ink-canvas"), { ssr: false });
 
@@ -26,7 +27,7 @@ type Note = {
 // supersedes the original via amended_from_note_id; the original is
 // auto-finalised by the API. The chain is rendered with a "Supersedes"
 // label on the new note and a "Superseded" badge on the original.
-export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patientId: string; handwrittenNotesEnabled: boolean }) {
+export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled }: { patientId: string; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [body, setBody] = useState("");
   const [ink, setInk] = useState<string | null>(null);
@@ -90,15 +91,32 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patie
     await refresh();
   }
 
-  async function onFinalise(noteId: string) {
+  async function onFinalise(n: Note) {
     if (!confirm("Finalise this note? It will be locked. To change it later, use Amend — which creates a new note linked to this one.")) return;
     setError(null);
-    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${noteId}/finalise`, {
-      method: "POST", credentials: "same-origin",
-    });
+    let init: RequestInit = { method: "POST", credentials: "same-origin" };
+    if (n.ink) {
+      // Handwritten notes capture a durable PNG at finalisation — the row becomes
+      // immutable, so it can't be attached later. Rasterise the strokes
+      // client-side and send them with the finalise request.
+      let inkPng: string;
+      try {
+        inkPng = await rasterizeInkToPngBase64(n.ink);
+      } catch {
+        setError("Could not prepare the handwriting image for finalising. Please try again.");
+        return;
+      }
+      init = {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ink_png: inkPng }),
+      };
+    }
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${n.id}/finalise`, init);
     if (!res.ok) {
       const err = await res.json().catch(() => null);
-      setError(err?.error ?? "Could not finalise note.");
+      setError(err?.message ?? err?.error ?? "Could not finalise note.");
       return;
     }
     await refresh();
@@ -167,6 +185,19 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patie
         {error ? <p className="text-state-danger text-sm">{error}</p> : null}
       </div>
 
+      {notesPdfEnabled ? (
+        <div className="flex justify-end">
+          <a
+            className="btn-secondary text-xs"
+            href={`/api/v1/patients/${patientId}/clinical-notes/pdf?disposition=inline`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Export notes PDF
+          </a>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
         {loading ? (
           <p className="text-text-secondary text-sm">Loading notes…</p>
@@ -196,8 +227,8 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled }: { patie
                   ) : null}
                 </div>
                 <div className="flex gap-2">
-                  {!n.ink && !n.is_finalised && !editing && (
-                    <button className="btn-secondary text-xs" onClick={() => onFinalise(n.id)}>Finalise</button>
+                  {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && !editing && (
+                    <button className="btn-secondary text-xs" onClick={() => onFinalise(n)}>Finalise</button>
                   )}
                   {!n.ink && !isSuperseded && !editing && (
                     <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
