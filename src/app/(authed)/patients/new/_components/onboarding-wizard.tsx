@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 
@@ -134,6 +134,8 @@ const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
     "Some details are missing or invalid. Please review the highlighted fields and try again.",
   stale_consent:
     "This consent version is no longer current. Refresh the page and review consent before submitting again.",
+  duplicate_patient:
+    "A patient with this ID number already exists. Search for and open the existing record instead of creating another file.",
 };
 
 const CONSENT_CARDS = [
@@ -178,6 +180,7 @@ export function OnboardingWizard(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
+  const submitInFlight = useRef(false);
 
   function applySameAsPatient(value: boolean) {
     setDraft((d) => {
@@ -225,6 +228,8 @@ export function OnboardingWizard(props: {
   }, [draft.section_a]);
 
   async function onSubmit() {
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
     setError(null);
     setIssues([]);
     setBusy(true);
@@ -255,10 +260,13 @@ export function OnboardingWizard(props: {
       const body = await res.json();
       if (!res.ok) {
         const errorCode = typeof body.error === "string" ? body.error : "";
+        const existing = body.existing as { id?: string; file_number?: string } | undefined;
         setError(
-          ONBOARDING_ERROR_MESSAGES[errorCode] ??
-            body.message ??
-            "We couldn’t submit this patient right now. Please try again."
+          errorCode === "duplicate_patient" && existing?.file_number
+            ? `A patient with this ID already exists as file ${existing.file_number}. Search for and open the existing record instead of creating another file.`
+            : ONBOARDING_ERROR_MESSAGES[errorCode] ??
+                body.message ??
+                "We couldn’t submit this patient right now. Please try again."
         );
         if (body.issues) {
           setIssues(body.issues.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`));
@@ -267,6 +275,7 @@ export function OnboardingWizard(props: {
       }
       router.push(`/patients/${body.id}`);
     } finally {
+      submitInFlight.current = false;
       setBusy(false);
     }
   }

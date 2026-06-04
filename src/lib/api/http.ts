@@ -7,7 +7,7 @@ export function jsonOk<T>(body: T, init?: ResponseInit) {
   return NextResponse.json(body, init);
 }
 
-export function jsonError(status: number, code: string, message?: string) {
+export function jsonError(status: number, code: string, message?: string, extra?: Record<string, unknown>) {
   const safeMessage =
     message ??
     (code === "validation_error"
@@ -17,7 +17,7 @@ export function jsonError(status: number, code: string, message?: string) {
         : code === "onboarding_failed"
           ? "We couldn’t save this patient right now. Please check the details and try again."
           : "Request failed.");
-  return NextResponse.json({ error: code, message: safeMessage }, { status });
+  return NextResponse.json({ ...(extra ?? {}), error: code, message: safeMessage }, { status });
 }
 
 export async function parseJson<T>(req: NextRequest, schema: ZodSchema<T>): Promise<T> {
