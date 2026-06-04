@@ -1,5 +1,5 @@
 import { resolveSession } from "@/lib/auth/session";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { getPracticeSettings } from "@/lib/practice/settings";
 import { redirect } from "next/navigation";
 import { OnboardingWizard } from "./_components/onboarding-wizard";
 
@@ -11,12 +11,15 @@ export default async function NewPatientPage() {
     notFound();
   }
 
-  const supabase = await getSupabaseServer();
-  const { data: settings } = await supabase
-    .from("practice_settings")
-    .select("active_consent_version, active_consent_body, privacy_notice_body")
-    .eq("id", 1)
-    .single();
+  // Reuse the same cached practice_settings read as the authenticated layout so
+  // opening the onboarding flow does not add another /rest/v1/practice_settings
+  // request on top of the layout/header read.
+  type ConsentSettings = {
+    active_consent_version?: string | null;
+    active_consent_body?: string | null;
+    privacy_notice_body?: string | null;
+  };
+  const settings = (await getPracticeSettings()) as ConsentSettings | null;
 
   if (!settings) redirect("/dashboard");
 
@@ -28,9 +31,9 @@ export default async function NewPatientPage() {
       </p>
 
       <OnboardingWizard
-        consentVersion={settings.active_consent_version}
-        consentBody={settings.active_consent_body}
-        privacyNotice={settings.privacy_notice_body}
+        consentVersion={settings.active_consent_version ?? ""}
+        consentBody={settings.active_consent_body ?? ""}
+        privacyNotice={settings.privacy_notice_body ?? ""}
       />
     </div>
   );

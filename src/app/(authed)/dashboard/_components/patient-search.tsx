@@ -90,6 +90,14 @@ export function PatientSearch() {
 
     return () => {
       if (timer.current) clearTimeout(timer.current);
+      // Abort any in-flight search as soon as the term/filter/page changes or
+      // the component unmounts. Without this, a slow old request can keep a
+      // PostgREST query alive until the next debounced request starts.
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+        lastFiredQuery.current = null;
+      }
     };
   }, [q, page, prefix, sort]);
 
