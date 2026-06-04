@@ -3,14 +3,13 @@
 // Design:
 //   1. Each entry's `entry_hash = sha256(prev_hash || "|" || canonical_json(row_minus_hash))`.
 //   2. Insert is delegated to the SECURITY DEFINER DB function
-//      `write_audit_entry`, which takes a tx-scoped advisory lock, re-reads
-//      the current tail, and refuses the insert if the caller's expected
-//      prev_hash doesn't match. On mismatch it raises SQLSTATE '40001' and we
-//      retry — this is how we get atomic read-tail-then-insert without
-//      SERIALIZABLE isolation at the session level.
-//   3. The function is owned by `audit_writer` (0002) and service_role no
-//      longer has direct INSERT on audit_logs (0006), so a stolen service-
-//      role key cannot append rows bypassing the chain check.
+//      `write_audit_entry_atomic`, which takes a tx-scoped advisory lock, reads
+//      the current tail, computes the next entry hash, and inserts in the same
+//      database transaction. This keeps each application audit write to one RPC
+//      instead of an app-side tail read followed by a second RPC.
+//   3. The function is owned by `audit_writer` and executes only through
+//      service_role from server-side code; the browser never receives the
+//      service key.
 //   4. A daily verifier walks the chain and alerts on breaks
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
@@ -64,16 +63,9 @@ function canonicalTimestamp(ts: unknown): string {
   return new Date(ts as string).toISOString();
 }
 
-const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
 const AUDIT_TIMEOUT_BUDGET_MS = 4000;
-// Backoff between tail-collision retries. Previously these retried with NO
-// delay, so under lock contention write_audit_entry was hammered in a tight
-// loop — a rapid RPC storm a small instance cannot absorb. A short increasing
-// delay spreads them out; a held lock is failed fast instead (see below).
-const AUDIT_TAIL_RETRY_BACKOFF_MS = 60;
-
 // Outbox draining runs ONLY from the scheduled cron
 // (/api/v1/internal/drain-audit-outbox) — never opportunistically from a
 // request handler. The previous in-request drain fanned out service_role REST
@@ -362,22 +354,22 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
       continue;
     }
 
-    if (code === "42501") {
-      const ok = await insertAuditRowFallback(row, entryHash, hasServiceRoleKey);
-      if (ok) return true;
-    }
+  if (!error) return true;
 
-    console.error("[audit] insert failed", {
-      hasServiceRoleKey,
-      action: input.action,
-      error: error.message,
-      code,
-      details: (error as { details?: string }).details,
-    });
+  const code = (error as { code?: string }).code;
+  const message = (error as { message?: string }).message ?? "";
+  if (code === "40001" && message.includes("lock busy")) {
+    console.warn("[audit] atomic chain lock busy — deferring to outbox", { action: input.action });
     return false;
   }
 
-  console.error("[audit] insert failed after retries", { hasServiceRoleKey, action: input.action });
+  console.error("[audit] atomic insert failed", {
+    hasServiceRoleKey,
+    action: input.action,
+    error: error.message,
+    code,
+    details: (error as { details?: string }).details,
+  });
   return false;
 }
 
