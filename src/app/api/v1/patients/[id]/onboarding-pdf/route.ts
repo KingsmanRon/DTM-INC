@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { renderOnboardingPdf } from "@/lib/pdf/onboarding";
+import { getPatientBundle } from "@/lib/patients/bundle";
 import { clientIp, handleRouteError, jsonError } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -15,19 +16,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const supabase = await getSupabaseServer();
 
-    const [practiceRes, patientRes, respRes, maRes, contactsRes, refRes, depRes, consentRes] = await Promise.all([
+    const [practiceRes, bundleRes] = await Promise.all([
       supabase.from("practice_settings").select("*").eq("id", 1).single(),
-      supabase.from("patients").select("*").eq("id", id).single(),
-      supabase.from("patient_account_responsible").select("*").eq("patient_id", id).maybeSingle(),
-      supabase.from("patient_medical_aid").select("*").eq("patient_id", id).maybeSingle(),
-      supabase.from("patient_emergency_contacts").select("*").eq("patient_id", id),
-      supabase.from("patient_referrals").select("*").eq("patient_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("patient_dependants").select("*").eq("patient_id", id).is("archived_at", null),
-      supabase.from("consent_records").select("*").eq("patient_id", id).order("accepted_at", { ascending: false }).limit(1).maybeSingle(),
+      getPatientBundle(supabase, id, { includeConsent: true }),
     ]);
 
-    if (patientRes.error || !patientRes.data) return jsonError(404, "not_found");
-    const p = practiceRes.data!;
+    if (bundleRes.error) return jsonError(500, "db_error", bundleRes.error.message);
+    if (!bundleRes.data) return jsonError(404, "not_found");
+    if (practiceRes.error || !practiceRes.data) return jsonError(500, "db_error", practiceRes.error?.message);
+    const p = practiceRes.data;
+    const bundle = bundleRes.data;
 
     const pdf = await renderOnboardingPdf({
       practice: {
@@ -35,20 +33,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         doctorName: p.doctor_name, qualifications: p.doctor_qualifications,
         address: p.practice_address, phone: p.practice_phone,
       },
-      fileNumber: patientRes.data.file_number,
-      patient: patientRes.data,
-      responsible: respRes.data,
-      medicalAid: maRes.data,
-      contacts: contactsRes.data ?? [],
-      referral: refRes.data,
-      dependants: depRes.data ?? [],
-      consent: consentRes.data ? {
-        version: consentRes.data.consent_text_version,
-        hash: consentRes.data.consent_text_hash,
-        acceptedBy: consentRes.data.accepted_by_user_id,
-        acceptedAt: consentRes.data.accepted_at,
-        signatureType: consentRes.data.signature_type,
-        signatureValue: consentRes.data.signature_value,
+      fileNumber: bundle.patient.file_number ?? "",
+      patient: bundle.patient,
+      responsible: bundle.responsible,
+      medicalAid: bundle.medical_aid,
+      contacts: bundle.contacts,
+      referral: bundle.referral,
+      dependants: bundle.dependants,
+      consent: bundle.consent ? {
+        version: bundle.consent.consent_text_version ?? "",
+        hash: bundle.consent.consent_text_hash ?? "",
+        acceptedBy: bundle.consent.accepted_by_user_id ?? "",
+        acceptedAt: bundle.consent.accepted_at ?? "",
+        signatureType: bundle.consent.signature_type ?? "",
+        signatureValue: bundle.consent.signature_value ?? "",
       } : null,
     });
 
@@ -61,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       entityType: "patient",
       entityId: id,
       patientId: id,
-      metadata: { sha256, file_number: patientRes.data.file_number, bytes: pdf.length },
+      metadata: { sha256, file_number: bundle.patient.file_number ?? null, bytes: pdf.length },
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });
@@ -72,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `${disposition}; filename="onboarding-${patientRes.data.file_number}.pdf"`,
+        "Content-Disposition": `${disposition}; filename="onboarding-${bundle.patient.file_number ?? id}.pdf"`,
         "Cache-Control": "no-store",
         "X-Content-SHA256": sha256,
       },

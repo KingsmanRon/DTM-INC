@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getPatientBundle } from "@/lib/patients/bundle";
 import { PatientTabs } from "./_components/patient-tabs";
 import { PrintCurrentFileButton } from "@/components/PrintCurrentFileButton";
 import { canUseHandwrittenNotes, getHandwrittenNotesFeatures } from "@/lib/clinical-notes/features";
@@ -15,8 +16,9 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
   const { id } = await params;
   const supabase = await getSupabaseServer();
 
-  const { data: patient, error } = await supabase.from("patients").select("*").eq("id", id).maybeSingle();
-  if (error || !patient) notFound();
+  const { data: bundle, error } = await getPatientBundle(supabase, id);
+  if (error || !bundle) notFound();
+  const { patient } = bundle;
 
   const isDoctor = session.role === "doctor";
   const inkEnabled = isDoctor && canUseHandwrittenNotes(session.userId);
@@ -53,6 +55,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
         handwrittenNotesEnabled={inkEnabled}
         handwrittenFinaliseEnabled={inkEnabled && features.finaliseEnabled}
         notesPdfEnabled={isDoctor && features.pdfEnabled}
+        initialDemographics={bundle}
       />
     </div>
   );

@@ -17,11 +17,10 @@ export type MfaDecision =
   | { action: "enrol" }
   | { action: "challenge"; factorId: string };
 
-export async function resolveMfa(role: AppRole, route = "/dashboard"): Promise<MfaDecision> {
+export async function resolveMfa(role: AppRole, route = "/dashboard", userId?: string): Promise<MfaDecision> {
   if (role === "staff") return { action: "ok" };
 
   const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
 
   const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
@@ -35,7 +34,7 @@ export async function resolveMfa(role: AppRole, route = "/dashboard"): Promise<M
   if (process.env.AUTH_DEBUG === "true") {
     console.info("[auth-mfa]", {
       route,
-      userId: user?.id ?? null,
+      userId: userId ?? null,
       aal: aal?.currentLevel ?? null,
       factorCount,
       verifiedFactorCount,
