@@ -14,6 +14,10 @@ type Note = {
   ink: string | null;
   is_finalised: boolean;
   amended_from_note_id: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  voided_by_name: string | null;
+  void_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -41,22 +45,28 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   const [amendBody, setAmendBody] = useState("");
   const [amendBusy, setAmendBusy] = useState(false);
   const [exportDate, setExportDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showVoidedNotes, setShowVoidedNotes] = useState(false);
+  const [voidingNote, setVoidingNote] = useState<Note | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidBusy, setVoidBusy] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const byId = useMemo(() => {
     const m = new Map<string, Note>();
-    for (const n of notes) m.set(n.id, n);
+    for (const n of notes.filter((note) => !note.voided_at)) m.set(n.id, n);
     return m;
   }, [notes]);
   const supersededIds = useMemo(() => {
     const s = new Set<string>();
-    for (const n of notes) if (n.amended_from_note_id) s.add(n.amended_from_note_id);
+    for (const n of notes.filter((note) => !note.voided_at)) if (n.amended_from_note_id) s.add(n.amended_from_note_id);
     return s;
   }, [notes]);
 
   async function refresh() {
     setLoading(true);
     setError(null);
-    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes`, { credentials: "same-origin" });
+    const qs = showVoidedNotes ? "?include_voided=true" : "";
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes${qs}`, { credentials: "same-origin" });
     if (!res.ok) {
       const err = await res.json().catch(() => null);
       setError(err?.error ?? "Could not load clinical notes.");
@@ -68,12 +78,14 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
     setNotes(j.notes ?? []);
     setLoading(false);
   }
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [patientId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { refresh(); }, [patientId, showVoidedNotes]);
 
   async function onAdd() {
     if (!body.trim() && !ink) return;
     setBusy(true);
     setError(null);
+    setSuccess(null);
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -156,6 +168,47 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
     await refresh();
   }
 
+  function openVoidModal(note: Note) {
+    setVoidingNote(note);
+    setVoidReason("");
+    setError(null);
+    setSuccess(null);
+  }
+
+  function closeVoidModal() {
+    if (voidBusy) return;
+    setVoidingNote(null);
+    setVoidReason("");
+  }
+
+  async function submitVoid() {
+    if (!voidingNote || voidReason.trim().length < 3) return;
+    setVoidBusy(true);
+    setError(null);
+    setSuccess(null);
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${voidingNote.id}/void`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ reason: voidReason.trim() }),
+    });
+    setVoidBusy(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.message ?? err?.error ?? "Could not void note.");
+      return;
+    }
+    setSuccess("Clinical note voided. The original remains preserved for audit/history.");
+    setVoidingNote(null);
+    setVoidReason("");
+    await refresh();
+  }
+
+  const activeNotes = notes.filter((note) => !note.voided_at);
+  const voidedNotes = notes
+    .filter((note) => note.voided_at)
+    .sort((a, b) => new Date(b.voided_at ?? 0).getTime() - new Date(a.voided_at ?? 0).getTime());
+
   return (
     <div className="space-y-4">
       <div className="card space-y-3">
@@ -186,6 +239,7 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
           {busy ? "Saving…" : "Save note"}
         </button>
         {error ? <p className="text-state-danger text-sm">{error}</p> : null}
+        {success ? <p className="text-state-success text-sm">{success}</p> : null}
       </div>
 
       {notesPdfEnabled ? (
@@ -205,12 +259,24 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
         </div>
       ) : null}
 
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="section-title">Clinical Notes</h3>
+        <label className="flex items-center gap-2 text-sm text-text-secondary">
+          <input
+            type="checkbox"
+            checked={showVoidedNotes}
+            onChange={(event) => setShowVoidedNotes(event.target.checked)}
+          />
+          Show voided notes
+        </label>
+      </div>
+
       <div className="space-y-3">
         {loading ? (
           <p className="text-text-secondary text-sm">Loading notes…</p>
-        ) : notes.length === 0 ? (
-          <p className="text-text-secondary text-sm">No notes yet.</p>
-        ) : notes.map((n) => {
+        ) : activeNotes.length === 0 ? (
+          <p className="text-text-secondary text-sm">No active notes yet.</p>
+        ) : activeNotes.map((n) => {
           const isSuperseded = supersededIds.has(n.id);
           const supersedes = n.amended_from_note_id ? byId.get(n.amended_from_note_id) : null;
           const editing = amendingId === n.id;
@@ -238,9 +304,12 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
                     <button className="btn-secondary text-xs" onClick={() => onFinalise(n)}>Finalise</button>
                   )}
                   {/* Amend is typed-only: never offered for handwritten (ink) notes. */}
-                  {!isSuperseded && !editing && !n.ink && (
+                  {!isSuperseded && !editing && !n.ink && !n.voided_at && (
                     <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
                   )}
+                  {n.is_finalised && !n.voided_at && !editing ? (
+                    <button className="btn-secondary text-xs text-state-danger" onClick={() => openVoidModal(n)}>Void Note</button>
+                  ) : null}
                 </div>
               </div>
 
@@ -283,6 +352,74 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
           );
         })}
       </div>
+
+      {showVoidedNotes ? (
+        <div className="space-y-3">
+          <h3 className="section-title">Voided Notes</h3>
+          {!loading && voidedNotes.length === 0 ? (
+            <p className="text-text-secondary text-sm">No voided notes.</p>
+          ) : null}
+          {voidedNotes.map((n) => (
+            <div key={n.id} className="card border-state-danger/40 bg-state-danger/5">
+              <div className="flex items-start justify-between mb-2 gap-2 flex-wrap">
+                <div className="text-sm space-y-1">
+                  <div>
+                    <span className="font-mono">{n.note_date}</span>
+                    <span className="ml-2 px-2 py-0.5 rounded bg-state-danger/20 text-state-danger text-xs">Voided</span>
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Voided {n.voided_at ? new Date(n.voided_at).toLocaleString() : "date unavailable"}
+                    {n.voided_by_name ? ` by ${n.voided_by_name}` : n.voided_by ? ` by ${n.voided_by}` : ""}
+                  </p>
+                  <p className="text-xs text-text-secondary">Reason: {n.void_reason}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
+                {n.ink ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-text-secondary">Handwritten note</p>
+                    <InkView ink={n.ink} />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {voidingNote ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card max-w-lg w-full space-y-4">
+            <div>
+              <h3 className="section-title">Void clinical note?</h3>
+              <p className="text-sm text-text-secondary mt-2">
+                This will not delete the note. It will mark the note as voided and remove it from the active clinical timeline. The original note will be preserved for audit/history.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="label">Reason for voiding</label>
+              <textarea
+                className="input"
+                rows={4}
+                required
+                value={voidReason}
+                onChange={(event) => setVoidReason(event.target.value)}
+                placeholder="Created during system testing; entered against wrong patient; duplicate note; entered in error; incorrect clinical encounter"
+              />
+              {voidReason.trim().length > 0 && voidReason.trim().length < 3 ? (
+                <p className="text-xs text-state-danger">Reason must be at least 3 characters.</p>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" disabled={voidBusy} onClick={closeVoidModal}>Cancel</button>
+              <button className="btn-primary" disabled={voidBusy || voidReason.trim().length < 3} onClick={submitVoid}>
+                {voidBusy ? "Voiding…" : "Void Note"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
