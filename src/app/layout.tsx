@@ -1,23 +1,8 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import { Outfit, IBM_Plex_Mono } from "next/font/google";
 import { SwRegister } from "./sw-register";
 import { IOSInstallBanner } from "@/components/IOSInstallBanner";
 import { AndroidInstallButton } from "@/components/AndroidInstallButton";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  variable: "--font-outfit",
-});
-
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
-  display: "swap",
-  variable: "--font-ibm-plex-mono",
-});
 
 export const metadata: Metadata = {
   title: "DTM Inc. — Patient Records",
@@ -53,7 +38,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-ZA" className={`${outfit.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en-ZA">
       <body>
         {children}
         <SwRegister />

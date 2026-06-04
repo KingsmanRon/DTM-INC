@@ -4,6 +4,8 @@
 
 :root {
   color-scheme: dark;
+  --font-outfit: "Outfit", system-ui, sans-serif;
+  --font-ibm-plex-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 html, body {
