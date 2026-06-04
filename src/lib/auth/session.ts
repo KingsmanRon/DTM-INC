@@ -6,6 +6,7 @@
 // CRITICAL: 404-on-forbidden is an information-hiding strategy, not a
 // silent refusal. Every denial emits an `access_denied` audit row so the
 // refusal is observable in /admin/audit.
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSupabaseServer } from "@/lib/supabase/server";
@@ -28,7 +29,7 @@ export class AuthError extends Error {
   }
 }
 
-export async function resolveSession(): Promise<Session | null> {
+export const resolveSession = cache(async (): Promise<Session | null> => {
   const supabase = await getSupabaseServer();
 
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
@@ -83,7 +84,7 @@ export async function resolveSession(): Promise<Session | null> {
   });
 
   return sessionFromProfile(appUser);
-}
+});
 
 export async function requireSession(): Promise<Session> {
   const s = await resolveSession();

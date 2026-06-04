@@ -5,6 +5,7 @@ import type { AppRole } from "@/lib/auth/session";
 import { DemographicsTab } from "./demographics-tab";
 import { DocumentsTab } from "./documents-tab";
 import { ClinicalNotesTab } from "./clinical-notes-tab";
+import type { PatientBundle } from "@/lib/patients/bundle";
 
 // §15 decision #2: the clinical-notes tab is ENTIRELY INVISIBLE to non-doctors.
 // We do not render a placeholder, a badge, or any count.
@@ -15,7 +16,7 @@ const BASE_TABS = [
 
 type TabId = "demographics" | "documents" | "clinical";
 
-export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean }) {
+export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled, initialDemographics }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean; initialDemographics: PatientBundle }) {
   const [active, setActive] = useState<TabId>("demographics");
 
   const tabs = role === "doctor"
@@ -40,7 +41,7 @@ export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrit
         ))}
       </nav>
 
-      {active === "demographics" && <DemographicsTab patientId={patientId} />}
+      {active === "demographics" && <DemographicsTab patientId={patientId} initialData={initialDemographics} />}
       {active === "documents" && <DocumentsTab patientId={patientId} />}
       {active === "clinical" && role === "doctor" && <ClinicalNotesTab patientId={patientId} handwrittenNotesEnabled={handwrittenNotesEnabled} handwrittenFinaliseEnabled={handwrittenFinaliseEnabled} notesPdfEnabled={notesPdfEnabled} />}
     </div>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
+import { getPatientBundle } from "@/lib/patients/bundle";
 import { TitleEnum, PayerType } from "@/lib/validation/patient";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
@@ -15,28 +16,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const supabase = await getSupabaseServer();
 
-    const [patient, responsible, medicalAid, contacts, referral, dependants] = await Promise.all([
-      supabase.from("patients").select("*").eq("id", id).single(),
-      supabase.from("patient_account_responsible").select("*").eq("patient_id", id).maybeSingle(),
-      supabase.from("patient_medical_aid").select("*").eq("patient_id", id).maybeSingle(),
-      supabase.from("patient_emergency_contacts").select("*").eq("patient_id", id),
-      supabase.from("patient_referrals").select("*").eq("patient_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("patient_dependants").select("*").eq("patient_id", id).is("archived_at", null),
-    ]);
+    const { data: bundle, error } = await getPatientBundle(supabase, id);
 
-    if (patient.error || !patient.data) return jsonError(404, "not_found");
+    if (error) return jsonError(500, "db_error", error.message);
+    if (!bundle) return jsonError(404, "not_found");
 
     // Deliberately DO NOT include clinical_notes here. The doctor fetches
     // those from /clinical-notes, staff/admin receive 404 from that endpoint.
     void session;
-    return jsonOk({
-      patient: patient.data,
-      responsible: responsible.data,
-      medical_aid: medicalAid.data,
-      contacts: contacts.data ?? [],
-      referral: referral.data,
-      dependants: dependants.data ?? [],
-    });
+    return jsonOk(bundle);
   } catch (err) {
     return handleRouteError(err);
   }

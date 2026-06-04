@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "10", 10) || 10));
 
-    if (q.length < 2 && !prefix) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
+    if (q.length < 3 && !prefix) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
 
     const supabase = await getSupabaseServer();
     const digits = q.replace(/\D/g, "");
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       .from("active_patients")
       .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at", { count: "exact" });
 
-    if (q.length >= 2) query = query.or(conditions.join(","));
+    if (q.length >= 3) query = query.or(conditions.join(","));
     if (prefix) query = query.ilike("file_number", `${prefix}-%`);
 
     if (sort === "file_number_asc") query = query.order("file_number", { ascending: true });

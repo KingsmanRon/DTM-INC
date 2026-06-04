@@ -42,9 +42,7 @@ function isPublic(pathname: string): boolean {
   if (pathname.startsWith("/api/v1/internal/")) return true;
   // /mfa/* requires AAL1 but not AAL2 — handled inside the page, not here.
   if (pathname.startsWith("/mfa/")) return false;
-  return pathname.startsWith("/_next") || pathname.startsWith("/brand") ||
-         pathname.startsWith("/icons") || pathname === "/favicon.ico" ||
-         pathname === "/manifest.webmanifest" || pathname === "/sw.js";
+  return false;
 }
 
 export async function middleware(req: NextRequest) {
@@ -70,7 +68,11 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Refresh the session if expired. Swallow errors — authorisation happens later.
+  // Coarse protected-route validation. Keep getUser() for now: this project
+  // currently depends on Supabase Auth server validation/session refresh here,
+  // and @supabase/supabase-js in package.json predates a clearly-supported
+  // getClaims() path for local JWKS verification in middleware. Do not replace
+  // this with getSession(), which trusts cookie contents.
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
@@ -90,5 +92,11 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|brand|manifest.webmanifest|sw.js).*)"],
+  matcher: [
+    "/dashboard/:path*",
+    "/patients/:path*",
+    "/admin/:path*",
+    "/mfa/:path*",
+    "/api/v1/:path*",
+  ],
 };

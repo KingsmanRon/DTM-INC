@@ -94,6 +94,7 @@ const OUTBOX_DRAIN_LOCK_TTL_S = 120; // lease length for one drain run
 // then enqueue), so it never fans out regardless of this flag.
 let auditCircuitOpenUntil = 0;
 let outboxDrainInFlight = false;
+let atomicAuditRpcUnavailable = false;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -244,10 +245,54 @@ async function insertAuditRowFallback(
   return false;
 }
 
+function isMissingAtomicAuditRpc(error: { code?: string; message?: string }): boolean {
+  return error.code === "42883" || error.code === "PGRST202" || (error.message ?? "").includes("write_audit_entry_atomic");
+}
+
 async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
   const admin = getSupabaseAdmin();
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+  if (!atomicAuditRpcUnavailable) {
+    const atomicCreatedAt = new Date().toISOString();
+    const { error: atomicError } = await admin.rpc("write_audit_entry_atomic", {
+      p_actor_user_id: input.actorUserId,
+      p_actor_role: input.actorRole,
+      p_action: input.action,
+      p_entity_type: input.entityType ?? null,
+      p_entity_id: input.entityId ?? null,
+      p_patient_id: input.patientId ?? null,
+      p_metadata_json: input.metadata ?? {},
+      p_ip_address: input.ipAddress ?? null,
+      p_user_agent: input.userAgent ?? null,
+      p_created_at: atomicCreatedAt,
+    });
+
+    if (!atomicError) return true;
+
+    const atomicCode = (atomicError as { code?: string }).code;
+    const atomicMessage = (atomicError as { message?: string }).message ?? "";
+    if (!isMissingAtomicAuditRpc({ code: atomicCode, message: atomicMessage })) {
+      if (atomicCode === "40001" && atomicMessage.includes("lock busy")) {
+        console.warn("[audit] atomic chain lock busy — deferring to outbox", { action: input.action });
+        return false;
+      }
+      console.error("[audit] atomic insert failed", {
+        hasServiceRoleKey,
+        action: input.action,
+        error: atomicError.message,
+        code: atomicCode,
+        details: (atomicError as { details?: string }).details,
+      });
+      return false;
+    }
+
+    atomicAuditRpcUnavailable = true;
+  }
+
+  // Compatibility fallback for environments before the reviewed atomic audit
+  // migration is applied. Once write_audit_entry_atomic exists, the synchronous
+  // path is one RPC call and no longer performs this app-side tail read.
   for (let attempt = 0; attempt < MAX_TAIL_COLLISION_RETRIES; attempt++) {
     const { data: last, error: readErr } = await admin
       .from("audit_logs")
