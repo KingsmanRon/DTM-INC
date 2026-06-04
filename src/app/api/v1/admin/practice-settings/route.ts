@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireRole, resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { invalidatePracticeSettings } from "@/lib/practice/settings";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
@@ -63,6 +64,9 @@ export async function PATCH(req: NextRequest) {
       .update({ ...patch, updated_by: session.userId })
       .eq("id", 1);
     if (error) return jsonError(500, "db_error", error.message);
+
+    // Drop the cached copy so the header/settings reflect the change immediately.
+    invalidatePracticeSettings();
 
     await writeAudit({
       actorUserId: session.userId,

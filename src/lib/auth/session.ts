@@ -9,7 +9,9 @@
 import { cache } from "react";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import type { User } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { logSupabaseCall } from "@/lib/supabase/log";
 import { writeAudit } from "@/lib/audit/log";
 import {
   APP_PROFILE_QUERY_DESCRIPTION,
@@ -29,14 +31,30 @@ export class AuthError extends Error {
   }
 }
 
+// The single source of server-verified identity for a request. getUser() hits
+// Supabase Auth (/auth/v1/user) to verify the JWT, so it must run AT MOST ONCE
+// per request. Wrapped in cache() and shared by resolveSession (profile/role)
+// and resolveMfa (verified factors) so neither re-verifies independently.
+export const getVerifiedUser = cache(async (): Promise<User | null> => {
+  const supabase = await getSupabaseServer();
+  logSupabaseCall({
+    caller: "getVerifiedUser",
+    client: "server",
+    action: "auth.getUser",
+    target: "/auth/v1/user",
+  });
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error("[auth] getUser failed", { message: error.message });
+    return null;
+  }
+  return user ?? null;
+});
+
 export const resolveSession = cache(async (): Promise<Session | null> => {
   const supabase = await getSupabaseServer();
 
-  const { data: { user }, error: userErr } = await supabase.auth.getUser();
-  if (userErr) {
-    console.error("[auth] getUser failed", { message: userErr.message });
-    return null;
-  }
+  const user = await getVerifiedUser();
   if (!user) return null;
 
   // Resolve the app profile under the caller's authenticated RLS context.
@@ -51,6 +69,7 @@ export const resolveSession = cache(async (): Promise<Session | null> => {
   };
 
   console.info("[auth] app profile lookup started", { target: profileQueryTarget });
+  logSupabaseCall({ caller: "resolveSession", client: "server", action: "select", target: "app_users" });
 
   const { data, error } = await supabase
     .from("app_users")
