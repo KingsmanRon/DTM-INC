@@ -1,13 +1,27 @@
 import { notFound } from "next/navigation";
 import { resolveSession } from "@/lib/auth/session";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { getPracticeSettings } from "@/lib/practice/settings";
 
 export default async function SettingsPage() {
   const session = await resolveSession();
   if (!session || session.role !== "admin") notFound();
 
-  const supabase = await getSupabaseServer();
-  const { data } = await supabase.from("practice_settings").select("*").eq("id", 1).single();
+  // Shared cached read — same source the header uses, so opening Settings does
+  // not issue another /rest/v1/practice_settings query.
+  type SettingsRow = {
+    practice_name: string | null;
+    practice_tagline: string | null;
+    practice_number: string | null;
+    doctor_name: string | null;
+    doctor_qualifications: string | null;
+    practice_address: string | null;
+    practice_phone: string | null;
+    file_number_format: string | null;
+    active_consent_version: string | null;
+    information_officer_name: string | null;
+    information_officer_email: string | null;
+  };
+  const data = (await getPracticeSettings()) as SettingsRow | null;
   if (!data) return null;
 
   return (

@@ -92,11 +92,22 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // NOTE: /api/v1/* is intentionally NOT matched here. Every /api/v1 handler
+  // already performs the authoritative server-side verification itself —
+  // requireRole()/requireSession() -> resolveSession() -> auth.getUser() — and
+  // returns 401/404 on failure (internal cron routes verify CRON_SECRET). Running
+  // getUser() in middleware too meant TWO /auth/v1/user calls per API request.
+  // Excluding API routes here drops it to one (in the handler, where the verified
+  // user is actually needed for the RLS-bound query + role lookup). The handler's
+  // Supabase client still refreshes and writes session cookies on the response,
+  // so token rotation is unaffected. Page routes stay matched: Server Components
+  // cannot set cookies, so middleware remains the place that refreshes the
+  // browser session on navigation. The /api/* branches above are retained as
+  // defensive behaviour in case this matcher is ever broadened again.
   matcher: [
     "/dashboard/:path*",
     "/patients/:path*",
     "/admin/:path*",
     "/mfa/:path*",
-    "/api/v1/:path*",
   ],
 };

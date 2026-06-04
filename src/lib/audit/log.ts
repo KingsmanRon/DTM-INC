@@ -14,6 +14,7 @@
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { logSupabaseCall } from "@/lib/supabase/log";
 import type { AppRole } from "@/lib/auth/session";
 
 export type AuditAction =
@@ -105,6 +106,7 @@ function isTransientAuditError(err: { code?: string; message?: string }): boolea
 
 async function enqueueAudit(input: AuditInput, reason: string): Promise<void> {
   const admin = getSupabaseAdmin();
+  logSupabaseCall({ caller: "enqueueAudit", client: "admin", action: "insert", target: "audit_log_outbox" });
   const { error } = await admin.from("audit_log_outbox").insert({
     payload_json: input,
     reason,
@@ -210,6 +212,7 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   const createdAt = new Date().toISOString();
+  logSupabaseCall({ caller: "writeAuditImmediate", client: "admin", action: "rpc", target: "write_audit_entry_atomic" });
   const { error } = await admin.rpc("write_audit_entry_atomic", {
     p_actor_user_id: input.actorUserId,
     p_actor_role: input.actorRole,

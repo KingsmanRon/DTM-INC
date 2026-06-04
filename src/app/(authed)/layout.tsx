@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { resolveSession } from "@/lib/auth/session";
 import { resolveMfa } from "@/lib/auth/mfa";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { getPracticeSettings } from "@/lib/practice/settings";
 import { LogoutButton } from "./_components/logout-button";
 import { InstallHelpLink } from "@/components/InstallHelpLink";
 
@@ -16,21 +16,18 @@ export default async function AuthedLayout({ children }: { children: React.React
   if (mfa.action === "enrol") redirect("/mfa/enrol");
   if (mfa.action === "challenge") redirect("/mfa/challenge");
 
-  const supabase = await getSupabaseServer();
-  const { data: settings } = await supabase
-    .from("practice_settings")
-    .select("practice_name, information_officer_name")
-    .eq("id", 1)
-    .maybeSingle();
-
-  const practiceName = settings?.practice_name ?? "DTM Inc.";
+  // Shared, cached read (see lib/practice/settings.ts) — no longer a per-render
+  // /rest/v1/practice_settings call.
+  const settings = await getPracticeSettings();
+  const practiceName = (settings?.practice_name as string | undefined) ?? "DTM Inc.";
+  const informationOfficerName = (settings?.information_officer_name as string | undefined) ?? "Dr. Thomas Mtshali";
 
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-border-subtle bg-surface-elevated">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
           <div className="flex items-center justify-between gap-3">
-            <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
+            <Link href="/dashboard" prefetch={false} className="flex min-w-0 items-center gap-3">
             <Image
               src="/brand/logo.png"
               alt="DTM INC. logo"
@@ -48,16 +45,21 @@ export default async function AuthedLayout({ children }: { children: React.React
               </span>
             </div>
           </div>
+          {/* prefetch={false}: these are dynamic, cookie-bound pages. Letting
+              Next prefetch every always-visible nav link ran the full authed
+              layout + target page server-side in the background (each one =
+              getUser + app_users + practice_settings + the page's own query),
+              multiplying Supabase REST/Auth traffic on idle. Navigate on click. */}
           <nav className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:w-auto">
-            <Link href="/dashboard" className="hover:text-accent-teal">Dashboard</Link>
+            <Link href="/dashboard" prefetch={false} className="hover:text-accent-teal">Dashboard</Link>
             {session.role === "doctor" || session.role === "staff" ? (
-              <Link href="/patients/new" className="hover:text-accent-teal">New patient</Link>
+              <Link href="/patients/new" prefetch={false} className="hover:text-accent-teal">New patient</Link>
             ) : null}
             {session.role === "admin" ? (
               <>
-                <Link href="/admin/users" className="hover:text-accent-teal">Users</Link>
-                <Link href="/admin/audit" className="hover:text-accent-teal">Audit</Link>
-                <Link href="/admin/settings" className="hover:text-accent-teal">Settings</Link>
+                <Link href="/admin/users" prefetch={false} className="hover:text-accent-teal">Users</Link>
+                <Link href="/admin/audit" prefetch={false} className="hover:text-accent-teal">Audit</Link>
+                <Link href="/admin/settings" prefetch={false} className="hover:text-accent-teal">Settings</Link>
               </>
             ) : null}
           </nav>
@@ -78,7 +80,7 @@ export default async function AuthedLayout({ children }: { children: React.React
 
       <footer className="border-t border-border-subtle text-xs text-text-secondary">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-4 justify-between">
-          <span>POPIA-protected · Information Officer: {settings?.information_officer_name ?? "Dr. Thomas Mtshali"}</span>
+          <span>POPIA-protected · Information Officer: {informationOfficerName}</span>
           <div className="flex flex-wrap items-center gap-4">
             <Link href="/privacy" className="hover:text-accent-teal">Privacy notice</Link>
             <InstallHelpLink />
