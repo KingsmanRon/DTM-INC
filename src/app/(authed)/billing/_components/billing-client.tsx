@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BILLING_HOSPITALS, billingFilename, monthLabel } from "@/lib/billing/format";
+import { BILLING_HOSPITALS, HOSPITAL_FILE_PREFIX, billingFilename, monthLabel } from "@/lib/billing/format";
 
-type Candidate = {
-  patient_id: string;
-  file_number: string | null;
-  name: string;
-  id_number: string | null;
-  id_type: string | null;
-  medical_aid_number: string | null;
-  in_batch: boolean;
+type SearchResult = {
+  id: string;
+  file_number: string;
+  first_names: string;
+  surname: string;
+  id_number: string;
 };
 
 type BatchItem = {
@@ -25,13 +23,6 @@ type BatchItem = {
   returned_date: string | null;
   status: "pending" | "exported" | "returned";
   exported_at: string | null;
-};
-
-type CandidatesResponse = {
-  hospital: string;
-  month: string;
-  candidates: Candidate[];
-  batch: BatchItem[];
 };
 
 function currentMonthInput(): string {
@@ -65,57 +56,122 @@ export function BillingClient() {
     return fromUrl && /^\d{4}-\d{2}$/.test(fromUrl) ? fromUrl : currentMonthInput();
   }, [params]);
 
-  const [data, setData] = useState<CandidatesResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const prefix = HOSPITAL_FILE_PREFIX[hospital] ?? "";
+
+  const [batch, setBatch] = useState<BatchItem[]>([]);
+  const [loadingBatch, setLoadingBatch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [outgoingDate, setOutgoingDate] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Candidate search (reuses /api/v1/patients/search — debounced, paginated).
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastFired = useRef<string | null>(null);
 
   const setParam = useCallback(
     (key: string, value: string) => {
       const next = new URLSearchParams(params.toString());
+      next.set("hospital", hospital);
+      next.set("month", month);
       next.set(key, value);
-      // Default to the chosen hospital/month so the URL is shareable + reloadable.
-      if (!next.get("hospital")) next.set("hospital", hospital);
-      if (!next.get("month")) next.set("month", month);
       router.replace(`${pathname}?${next.toString()}`);
     },
     [params, pathname, router, hospital, month],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadBatch = useCallback(async () => {
+    setLoadingBatch(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/v1/billing/candidates?hospital=${encodeURIComponent(hospital)}&month=${encodeURIComponent(month)}`,
+        `/api/v1/billing/batch?hospital=${encodeURIComponent(hospital)}&month=${encodeURIComponent(month)}`,
         { cache: "no-store" },
       );
       if (!res.ok) {
         setError(await readError(res));
-        setData(null);
+        setBatch([]);
         return;
       }
-      const body = (await res.json()) as CandidatesResponse;
-      setData(body);
-      setSelected(new Set());
+      const body = (await res.json()) as { batch: BatchItem[] };
+      setBatch(body.batch ?? []);
     } catch {
-      setError("Could not load the billing data. Please try again.");
+      setError("Could not load the batch. Please try again.");
     } finally {
-      setLoading(false);
+      setLoadingBatch(false);
     }
   }, [hospital, month]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadBatch();
+  }, [loadBatch]);
 
-  const toStage = useMemo(
-    () => (data?.candidates ?? []).filter((c) => !c.in_batch),
-    [data],
-  );
+  // Reset to the first page of results when the term or hospital changes.
+  useEffect(() => {
+    setPage(1);
+  }, [q, prefix]);
+
+  // Debounced, abortable search scoped to the hospital's file-number prefix.
+  // Empty term + prefix returns the hospital's roster (paginated), so staff can
+  // browse or narrow — never the whole roster at once.
+  useEffect(() => {
+    const trimmed = q.trim();
+    const key = JSON.stringify({ trimmed, page, prefix });
+    if (timer.current) clearTimeout(timer.current);
+    if (!prefix) {
+      setResults([]);
+      setHasMore(false);
+      return;
+    }
+    if (lastFired.current === key) return;
+
+    timer.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      lastFired.current = key;
+      setSearching(true);
+      try {
+        const sp = new URLSearchParams({ prefix, page: String(page), pageSize: "10", sort: "updated_desc" });
+        if (trimmed.length >= 3) sp.set("q", trimmed);
+        const res = await fetch(`/api/v1/patients/search?${sp.toString()}`, {
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
+        const json = (await res.json()) as { data?: SearchResult[]; hasMore?: boolean };
+        setResults(json.data ?? []);
+        setHasMore(Boolean(json.hasMore));
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          setResults([]);
+          setHasMore(false);
+        }
+      } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          setSearching(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+        lastFired.current = null;
+      }
+    };
+  }, [q, page, prefix]);
+
+  const batchIds = useMemo(() => new Set(batch.map((b) => b.patient_id)), [batch]);
 
   function toggle(patientId: string) {
     setSelected((prev) => {
@@ -142,7 +198,8 @@ export function BillingClient() {
         return;
       }
       setNotice(`Added ${selected.size} file(s) to the batch.`);
-      await load();
+      setSelected(new Set());
+      await loadBatch();
     } finally {
       setBusy(false);
     }
@@ -161,7 +218,7 @@ export function BillingClient() {
         setError(await readError(res));
         return;
       }
-      await load();
+      await loadBatch();
     } finally {
       setBusy(false);
     }
@@ -176,7 +233,7 @@ export function BillingClient() {
         setError(await readError(res));
         return;
       }
-      await load();
+      await loadBatch();
     } finally {
       setBusy(false);
     }
@@ -206,55 +263,54 @@ export function BillingClient() {
       a.remove();
       URL.revokeObjectURL(url);
       setNotice("Export downloaded. The batch is marked as exported.");
-      await load();
+      await loadBatch();
     } finally {
       setBusy(false);
     }
   }
 
-  const batch = data?.batch ?? [];
-
   return (
     <div className="space-y-6">
-      <section className="card grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor="hospital">Hospital</label>
-          <select
-            id="hospital"
-            className="input"
-            value={hospital}
-            onChange={(e) => setParam("hospital", e.target.value)}
-          >
-            {BILLING_HOSPITALS.map((h) => (
-              <option key={h} value={h}>{h}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="month">Month</label>
-          <input
-            id="month"
-            type="month"
-            className="input"
-            value={month}
-            onChange={(e) => setParam("month", e.target.value)}
-          />
-        </div>
-      </section>
-
-      {error ? <p className="text-state-danger text-sm">{error}</p> : null}
-      {notice ? <p className="text-accent-teal text-sm">{notice}</p> : null}
-
+      {/* Section 1 — selectors + the batch they build, together. */}
       <section className="card space-y-4">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="hospital">Hospital</label>
+            <select
+              id="hospital"
+              className="input"
+              value={hospital}
+              onChange={(e) => setParam("hospital", e.target.value)}
+            >
+              {BILLING_HOSPITALS.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="month">Month</label>
+            <input
+              id="month"
+              type="month"
+              className="input"
+              value={month}
+              onChange={(e) => setParam("month", e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error ? <p className="text-state-danger text-sm">{error}</p> : null}
+        {notice ? <p className="text-accent-teal text-sm">{notice}</p> : null}
+
+        <div className="flex items-center justify-between border-t border-border-subtle pt-4">
           <h2 className="section-title">Batch — {monthLabel(month)}</h2>
           <span className="text-text-secondary text-xs">{batch.length} file(s) staged</span>
         </div>
 
-        {loading ? (
+        {loadingBatch ? (
           <p className="text-text-secondary text-sm">Loading…</p>
         ) : batch.length === 0 ? (
-          <p className="text-text-secondary text-sm">No files staged yet. Add candidates below.</p>
+          <p className="text-text-secondary text-sm">No files staged yet. Search and add patients below.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -327,9 +383,10 @@ export function BillingClient() {
         </div>
       </section>
 
-      <section className="card space-y-4">
+      {/* Section 2 — find and add patients (debounced server search). */}
+      <section className="card space-y-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="section-title">Candidates</h2>
+          <h2 className="section-title">Add patients</h2>
           <button
             type="button"
             className="btn-secondary w-full sm:w-auto"
@@ -340,32 +397,68 @@ export function BillingClient() {
           </button>
         </div>
 
-        {loading ? (
-          <p className="text-text-secondary text-sm">Loading…</p>
-        ) : toStage.length === 0 ? (
+        <input
+          className="input"
+          placeholder="Search this hospital by name, file number, or ID…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+
+        {searching ? <p className="text-xs text-text-secondary">Searching…</p> : null}
+
+        {results.length === 0 && !searching ? (
           <p className="text-text-secondary text-sm">
-            No further candidates for this hospital — every active file is already in the batch.
+            {q.trim().length > 0 ? "No matches in this hospital." : "Start typing to find patients, or browse the list."}
           </p>
         ) : (
           <ul className="divide-y divide-border-subtle">
-            {toStage.map((c) => (
-              <li key={c.patient_id} className="flex items-center gap-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={selected.has(c.patient_id)}
-                  onChange={() => toggle(c.patient_id)}
-                  aria-label={`Select ${c.name}`}
-                />
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{c.name}</p>
-                  <p className="truncate text-xs text-text-secondary">
-                    {c.file_number ?? "no file no."} · ID {c.id_number ?? "—"} · MA {c.medical_aid_number ?? "—"}
-                  </p>
-                </div>
-              </li>
-            ))}
+            {results.map((r) => {
+              const inBatch = batchIds.has(r.id);
+              return (
+                <li key={r.id} className="flex items-center gap-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.id)}
+                    disabled={inBatch}
+                    onChange={() => toggle(r.id)}
+                    aria-label={`Select ${r.surname}, ${r.first_names}`}
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{r.surname}, {r.first_names}</p>
+                    <p className="truncate text-xs text-text-secondary">
+                      {r.file_number} · ID {r.id_number || "—"}
+                    </p>
+                  </div>
+                  {inBatch ? (
+                    <span className="ml-auto text-xs text-accent-teal">In batch</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
+
+        {(results.length > 0 || page > 1) ? (
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={page === 1 || searching}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            <span className="text-xs text-text-secondary">Page {page}</span>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={!hasMore || searching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>
   );

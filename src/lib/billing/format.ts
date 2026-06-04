@@ -11,6 +11,15 @@ export const BILLING_HOSPITALS = [
 
 export type BillingHospital = (typeof BILLING_HOSPITALS)[number];
 
+// Hospital -> file-number prefix (set together at onboarding, see migration
+// 0013). Used to scope the shared patient search to the selected hospital.
+export const HOSPITAL_FILE_PREFIX: Record<string, string> = {
+  "Nkanyezi Private Hospital": "NKA",
+  "Fountain Private Hospital": "FOU",
+  "Mediclinic Vereeniging Hospital": "MED",
+  "Midvaal Private Hospital": "MID",
+};
+
 const MONTH_NAMES = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
   "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
