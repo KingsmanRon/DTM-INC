@@ -1,90 +1,71 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { PatientBundle as PatientPayload } from "@/lib/patients/bundle";
 
-type PatientPayload = {
-  patient: Record<string, string | null>;
-  responsible: Record<string, string | null> | null;
-  medical_aid: Record<string, string | null> | null;
-  contacts: Array<Record<string, string | null>>;
-  referral: Record<string, string | null> | null;
-  dependants: Array<Record<string, string | null>>;
-};
+function formFromPayload(data: PatientPayload | null) {
+  return {
+    hospital: data?.patient.hospital ?? "",
+    title: data?.patient.title ?? "",
+    first_names: data?.patient.first_names ?? "",
+    surname: data?.patient.surname ?? "",
+    email: data?.patient.email ?? "",
+    phone: data?.patient.phone ?? "",
+    address: data?.patient.address ?? "",
+    payer_type: data?.patient.payer_type ?? "",
+    responsible_first_names: data?.responsible?.first_names ?? "",
+    responsible_surname: data?.responsible?.surname ?? "",
+    responsible_phone: data?.responsible?.phone ?? "",
+    responsible_employer_name: data?.responsible?.employer_name ?? "",
+    responsible_occupation: data?.responsible?.occupation ?? "",
+    medical_main_member_name: data?.medical_aid?.main_member_name ?? "",
+    medical_aid_name: data?.medical_aid?.medical_aid_name ?? "",
+    medical_membership_number: data?.medical_aid?.membership_number ?? "",
+    medical_plan: data?.medical_aid?.plan ?? "",
+    contact_id: data?.contacts?.[0]?.id ?? "",
+    contact_name: data?.contacts?.[0]?.name ?? "",
+    contact_relationship: data?.contacts?.[0]?.relationship ?? "",
+    contact_phone: data?.contacts?.[0]?.phone ?? "",
+    referral_id: data?.referral?.id ?? "",
+    referral_type: data?.referral?.referrer_type ?? "self",
+    referral_name: data?.referral?.referrer_name ?? "",
+    referral_phone: data?.referral?.referrer_phone ?? "",
+  };
+}
 
-export function DemographicsTab({ patientId }: { patientId: string }) {
-  const [data, setData] = useState<PatientPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+export function DemographicsTab({ patientId, initialData }: { patientId: string; initialData: PatientPayload }) {
+  const [data, setData] = useState<PatientPayload | null>(initialData);
+  const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    hospital: "",
-    title: "",
-    first_names: "",
-    surname: "",
-    email: "",
-    phone: "",
-    address: "",
-    payer_type: "",
-    responsible_first_names: "",
-    responsible_surname: "",
-    responsible_phone: "",
-    responsible_employer_name: "",
-    responsible_occupation: "",
-    medical_main_member_name: "",
-    medical_aid_name: "",
-    medical_membership_number: "",
-    medical_plan: "",
-    contact_id: "",
-    contact_name: "",
-    contact_relationship: "",
-    contact_phone: "",
-    referral_id: "",
-    referral_type: "self",
-    referral_name: "",
-    referral_phone: "",
-  });
+  const [form, setForm] = useState(() => formFromPayload(initialData));
 
   useEffect(() => {
-    let alive = true;
+    if (initialData?.patient.id === patientId) {
+      setData(initialData);
+      setForm(formFromPayload(initialData));
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
     (async () => {
-      const res = await fetch(`/api/v1/patients/${patientId}`, { credentials: "same-origin" });
-      if (!res.ok) { if (alive) setLoading(false); return; }
-      const json = await res.json();
-      if (alive) {
-        setData(json);
-        setForm({
-          hospital: json.patient.hospital ?? "",
-          title: json.patient.title ?? "",
-          first_names: json.patient.first_names ?? "",
-          surname: json.patient.surname ?? "",
-          email: json.patient.email ?? "",
-          phone: json.patient.phone ?? "",
-          address: json.patient.address ?? "",
-          payer_type: json.patient.payer_type ?? "",
-          responsible_first_names: json.responsible?.first_names ?? "",
-          responsible_surname: json.responsible?.surname ?? "",
-          responsible_phone: json.responsible?.phone ?? "",
-          responsible_employer_name: json.responsible?.employer_name ?? "",
-          responsible_occupation: json.responsible?.occupation ?? "",
-          medical_main_member_name: json.medical_aid?.main_member_name ?? "",
-          medical_aid_name: json.medical_aid?.medical_aid_name ?? "",
-          medical_membership_number: json.medical_aid?.membership_number ?? "",
-          medical_plan: json.medical_aid?.plan ?? "",
-          contact_id: json.contacts?.[0]?.id ?? "",
-          contact_name: json.contacts?.[0]?.name ?? "",
-          contact_relationship: json.contacts?.[0]?.relationship ?? "",
-          contact_phone: json.contacts?.[0]?.phone ?? "",
-          referral_id: json.referral?.id ?? "",
-          referral_type: json.referral?.referrer_type ?? "self",
-          referral_name: json.referral?.referrer_name ?? "",
-          referral_phone: json.referral?.referrer_phone ?? "",
-        });
-        setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, [patientId]);
+      setLoading(true);
+      const res = await fetch(`/api/v1/patients/${patientId}`, {
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      if (!res.ok) { setLoading(false); return; }
+      const json = await res.json() as PatientPayload;
+      setData(json);
+      setForm(formFromPayload(json));
+      setLoading(false);
+    })().catch((err) => {
+      if (!(err instanceof DOMException && err.name === "AbortError")) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [patientId, initialData]);
 
   if (loading) return <p className="text-text-secondary text-sm">Loading…</p>;
   if (!data) return <p className="text-state-danger text-sm">Failed to load.</p>;

@@ -3,14 +3,13 @@
 // Design:
 //   1. Each entry's `entry_hash = sha256(prev_hash || "|" || canonical_json(row_minus_hash))`.
 //   2. Insert is delegated to the SECURITY DEFINER DB function
-//      `write_audit_entry`, which takes a tx-scoped advisory lock, re-reads
-//      the current tail, and refuses the insert if the caller's expected
-//      prev_hash doesn't match. On mismatch it raises SQLSTATE '40001' and we
-//      retry — this is how we get atomic read-tail-then-insert without
-//      SERIALIZABLE isolation at the session level.
-//   3. The function is owned by `audit_writer` (0002) and service_role no
-//      longer has direct INSERT on audit_logs (0006), so a stolen service-
-//      role key cannot append rows bypassing the chain check.
+//      `write_audit_entry_atomic`, which takes a tx-scoped advisory lock, reads
+//      the current tail, computes the next entry hash, and inserts in the same
+//      database transaction. This keeps each application audit write to one RPC
+//      instead of an app-side tail read followed by a second RPC.
+//   3. The function is owned by `audit_writer` and executes only through
+//      service_role from server-side code; the browser never receives the
+//      service key.
 //   4. A daily verifier walks the chain and alerts on breaks
 //      (scripts/verify-audit-chain.mjs).
 import { createHash } from "node:crypto";
@@ -64,16 +63,9 @@ function canonicalTimestamp(ts: unknown): string {
   return new Date(ts as string).toISOString();
 }
 
-const MAX_TAIL_COLLISION_RETRIES = 5;
 const MAX_TRANSIENT_RETRIES = 4;
 const TRANSIENT_BACKOFF_MS = 250;
 const AUDIT_TIMEOUT_BUDGET_MS = 4000;
-// Backoff between tail-collision retries. Previously these retried with NO
-// delay, so under lock contention write_audit_entry was hammered in a tight
-// loop — a rapid RPC storm a small instance cannot absorb. A short increasing
-// delay spreads them out; a held lock is failed fast instead (see below).
-const AUDIT_TAIL_RETRY_BACKOFF_MS = 60;
-
 // Outbox draining runs ONLY from the scheduled cron
 // (/api/v1/internal/drain-audit-outbox) — never opportunistically from a
 // request handler. The previous in-request drain fanned out service_role REST
@@ -213,126 +205,40 @@ export async function drainAuditOutbox(): Promise<OutboxDrainSummary> {
   return summary;
 }
 
-async function insertAuditRowFallback(
-  row: {
-    actor_user_id: string | null;
-    actor_role: AppRole | null;
-    action: AuditAction;
-    entity_type: string | null;
-    entity_id: string | null;
-    patient_id: string | null;
-    metadata_json: Record<string, unknown>;
-    ip_address: string | null;
-    user_agent: string | null;
-    created_at: string;
-    prev_hash: string | null;
-  },
-  entryHash: string,
-  hasServiceRoleKey: boolean,
-): Promise<boolean> {
-  const admin = getSupabaseAdmin();
-  const { error } = await admin.from("audit_logs").insert({ ...row, entry_hash: entryHash });
-  if (!error) return true;
-
-  console.error("[audit] fallback insert failed", {
-    hasServiceRoleKey,
-    action: row.action,
-    error: error.message,
-    code: (error as { code?: string }).code,
-    details: (error as { details?: string }).details,
-  });
-  return false;
-}
-
 async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
   const admin = getSupabaseAdmin();
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  for (let attempt = 0; attempt < MAX_TAIL_COLLISION_RETRIES; attempt++) {
-    const { data: last, error: readErr } = await admin
-      .from("audit_logs")
-      .select("entry_hash")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const createdAt = new Date().toISOString();
+  const { error } = await admin.rpc("write_audit_entry_atomic", {
+    p_actor_user_id: input.actorUserId,
+    p_actor_role: input.actorRole,
+    p_action: input.action,
+    p_entity_type: input.entityType ?? null,
+    p_entity_id: input.entityId ?? null,
+    p_patient_id: input.patientId ?? null,
+    p_metadata_json: input.metadata ?? {},
+    p_ip_address: input.ipAddress ?? null,
+    p_user_agent: input.userAgent ?? null,
+    p_created_at: createdAt,
+  });
 
-    if (readErr) {
-      console.error("[audit] tail read failed", { action: input.action, error: readErr.message });
-      return false;
-    }
+  if (!error) return true;
 
-    const prevHash = last?.entry_hash ?? null;
-    const createdAt = new Date().toISOString();
-    const row = {
-      actor_user_id: input.actorUserId,
-      actor_role: input.actorRole,
-      action: input.action,
-      entity_type: input.entityType ?? null,
-      entity_id: input.entityId ?? null,
-      patient_id: input.patientId ?? null,
-      metadata_json: input.metadata ?? {},
-      ip_address: input.ipAddress ?? null,
-      user_agent: input.userAgent ?? null,
-      created_at: createdAt,
-      prev_hash: prevHash,
-    };
-    const entryHash = computeEntryHash(prevHash, row);
-
-    const { error } = await admin.rpc("write_audit_entry", {
-      p_expected_prev_hash: prevHash,
-      p_entry_hash: entryHash,
-      p_actor_user_id: input.actorUserId,
-      p_actor_role: input.actorRole,
-      p_action: input.action,
-      p_entity_type: input.entityType ?? null,
-      p_entity_id: input.entityId ?? null,
-      p_patient_id: input.patientId ?? null,
-      p_metadata_json: input.metadata ?? {},
-      p_ip_address: input.ipAddress ?? null,
-      p_user_agent: input.userAgent ?? null,
-      p_created_at: createdAt,
-    });
-
-    if (!error) return true;
-
-    const code = (error as { code?: string }).code;
-    const message = (error as { message?: string }).message ?? "";
-
-    // write_audit_entry raises 40001 for two distinct reasons:
-    //   * "lock busy" — pg_try_advisory_xact_lock could not take the chain lock
-    //     (contention, or a session stuck holding it). Retrying in a tight loop
-    //     just hammers a lock that will not free in microseconds; on a small
-    //     instance that storms the DB. Fail fast and let the caller degrade —
-    //     the synchronous path opens its circuit + enqueues to the outbox, and
-    //     the drain defers the item to its next run.
-    //   * "tail moved" — a concurrent write advanced the chain tail between our
-    //     read and the function's re-check. Legitimate; worth a brief, backed-
-    //     off retry with a freshly-read tail.
-    if (code === "40001") {
-      if (message.includes("lock busy")) {
-        console.warn("[audit] chain lock busy — deferring to outbox", { action: input.action });
-        return false;
-      }
-      await sleep(AUDIT_TAIL_RETRY_BACKOFF_MS * (attempt + 1));
-      continue;
-    }
-
-    if (code === "42501") {
-      const ok = await insertAuditRowFallback(row, entryHash, hasServiceRoleKey);
-      if (ok) return true;
-    }
-
-    console.error("[audit] insert failed", {
-      hasServiceRoleKey,
-      action: input.action,
-      error: error.message,
-      code,
-      details: (error as { details?: string }).details,
-    });
+  const code = (error as { code?: string }).code;
+  const message = (error as { message?: string }).message ?? "";
+  if (code === "40001" && message.includes("lock busy")) {
+    console.warn("[audit] atomic chain lock busy — deferring to outbox", { action: input.action });
     return false;
   }
 
-  console.error("[audit] insert failed after retries", { hasServiceRoleKey, action: input.action });
+  console.error("[audit] atomic insert failed", {
+    hasServiceRoleKey,
+    action: input.action,
+    error: error.message,
+    code,
+    details: (error as { details?: string }).details,
+  });
   return false;
 }
 

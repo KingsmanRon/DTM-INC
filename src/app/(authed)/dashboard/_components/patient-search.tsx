@@ -31,17 +31,38 @@ export function PatientSearch() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastFiredQuery = useRef<string | null>(null);
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2 && !prefix) { setResults([]); setHasMore(false); return; }
+    const trimmed = q.trim();
+    const requestKey = JSON.stringify({ q: trimmed, page, prefix, sort });
 
-    // §FR-5: 250ms debounce, type-ahead, up to 10 matches.
+    if (timer.current) clearTimeout(timer.current);
+
+    if (trimmed.length < 3 && !prefix) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      lastFiredQuery.current = null;
+      setResults([]);
+      setHasMore(false);
+      setLoading(false);
+      return;
+    }
+
+    if (lastFiredQuery.current === requestKey) return;
+
+    // §FR-5: debounced type-ahead, up to 10 matches. Keep this at 500ms so
+    // intermediate terms such as "RA" do not storm PostgREST while typing.
     timer.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      lastFiredQuery.current = requestKey;
       setLoading(true);
       try {
         const params = new URLSearchParams({
-          q: q.trim(),
+          q: trimmed,
           page: String(page),
           pageSize: "10",
           sort,
@@ -49,16 +70,27 @@ export function PatientSearch() {
         if (prefix) params.set("prefix", prefix);
         const res = await fetch(`/api/v1/patients/search?${params.toString()}`, {
           credentials: "same-origin",
+          signal: controller.signal,
         });
         const json = await res.json();
         setResults(json.data ?? []);
         setHasMore(Boolean(json.hasMore));
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          setResults([]);
+          setHasMore(false);
+        }
       } finally {
-        setLoading(false);
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          setLoading(false);
+        }
       }
-    }, 250);
+    }, 500);
 
-    return () => { if (timer.current) clearTimeout(timer.current); };
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [q, page, prefix, sort]);
 
   useEffect(() => {
@@ -100,7 +132,7 @@ export function PatientSearch() {
         <ul className="bg-surface-elevated border border-border-subtle rounded-xl divide-y divide-border-subtle overflow-hidden shadow-sm">
           {results.map((r) => (
             <li key={r.id}>
-              <Link href={`/patients/${r.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-bg-primary transition-colors">
+              <Link href={`/patients/${r.id}`} prefetch={false} className="flex items-center justify-between px-4 py-3 hover:bg-bg-primary transition-colors">
                 <div>
                   <div className="font-medium">{r.surname}, {r.first_names}</div>
                   <div className="text-xs text-text-secondary">
@@ -116,7 +148,7 @@ export function PatientSearch() {
         </ul>
       ) : null}
 
-      {!loading && q.trim().length >= 2 && results.length === 0 ? (
+      {!loading && q.trim().length >= 3 && results.length === 0 ? (
         <p className="text-sm text-text-secondary">No matches.</p>
       ) : null}
 
