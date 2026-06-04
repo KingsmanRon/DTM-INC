@@ -23,10 +23,9 @@ type Note = {
 //
 // Clinical notes are append-only by policy: "Unfinalised" means "not yet
 // locked" (only the Finalise transition is permitted on the row itself).
-// To change wording, the doctor uses Amend, which creates a new note that
-// supersedes the original via amended_from_note_id; the original is
-// auto-finalised by the API. The chain is rendered with a "Supersedes"
-// label on the new note and a "Superseded" badge on the original.
+// Amendment authoring has been removed, but existing amend chains in the
+// data are still rendered with a "Supersedes" label on the newer note and
+// a "Superseded" badge on the original via amended_from_note_id.
 export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled }: { patientId: string; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [body, setBody] = useState("");
@@ -36,11 +35,6 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [amendingId, setAmendingId] = useState<string | null>(null);
-  const [amendBody, setAmendBody] = useState("");
-  const [amendInk, setAmendInk] = useState<string | null>(null);
-  const [showAmendCanvas, setShowAmendCanvas] = useState(false);
-  const [amendBusy, setAmendBusy] = useState(false);
   const [exportDate, setExportDate] = useState(new Date().toISOString().slice(0, 10));
 
   const byId = useMemo(() => {
@@ -94,7 +88,7 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   }
 
   async function onFinalise(n: Note) {
-    if (!confirm("Finalise this note? It will be locked. To change it later, use Amend — which creates a new note linked to this one.")) return;
+    if (!confirm("Finalise this note? It will be locked and can no longer be edited.")) return;
     setError(null);
     let init: RequestInit = { method: "POST", credentials: "same-origin" };
     if (n.ink) {
@@ -121,41 +115,6 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
       setError(err?.message ?? err?.error ?? "Could not finalise note.");
       return;
     }
-    await refresh();
-  }
-
-  function startAmend(n: Note) {
-    setAmendingId(n.id);
-    setAmendBody(n.body);
-    setAmendInk(null);
-    setShowAmendCanvas(false);
-    setError(null);
-  }
-  function cancelAmend() {
-    setAmendingId(null);
-    setAmendBody("");
-    setAmendInk(null);
-    setShowAmendCanvas(false);
-  }
-  async function submitAmend() {
-    if (!amendingId || (!amendBody.trim() && !amendInk)) return;
-    setAmendBusy(true);
-    setError(null);
-    // No note_date is sent — the API dates the amendment today. The original
-    // encounter date stays visible via the "Supersedes <date>" label.
-    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${amendingId}/amend`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ body: amendBody.trim() || undefined, ink: amendInk ?? undefined }),
-    });
-    setAmendBusy(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      setError(err?.message ?? err?.error ?? "Could not amend note.");
-      return;
-    }
-    cancelAmend();
     await refresh();
   }
 
@@ -198,7 +157,7 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
             <input type="date" className="input" value={exportDate} onChange={(e) => setExportDate(e.target.value)} />
           </div>
           <a
-            className="btn-secondary text-xs"
+            className="btn-secondary"
             href={`/api/v1/patients/${patientId}/clinical-notes/pdf?disposition=inline&date=${exportDate}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -216,7 +175,6 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
         ) : notes.map((n) => {
           const isSuperseded = supersededIds.has(n.id);
           const supersedes = n.amended_from_note_id ? byId.get(n.amended_from_note_id) : null;
-          const editing = amendingId === n.id;
           return (
             <div key={n.id} className={`card${isSuperseded ? " opacity-70" : ""}`}>
               <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
@@ -237,59 +195,21 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
                   ) : null}
                 </div>
                 <div className="flex gap-2">
-                  {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && !editing && (
+                  {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && (
                     <button className="btn-secondary text-xs" onClick={() => onFinalise(n)}>Finalise</button>
-                  )}
-                  {!isSuperseded && !editing && (!n.ink || n.is_finalised) && (
-                    <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
                   )}
                 </div>
               </div>
 
-              {editing ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="input font-mono"
-                    rows={6}
-                    placeholder="Amended note — plain text or markdown"
-                    value={amendBody}
-                    onChange={(e) => setAmendBody(e.target.value)}
-                  />
-                  {handwrittenNotesEnabled ? (
-                    <div className="space-y-2">
-                      <button type="button" className="btn-secondary text-xs" onClick={() => setShowAmendCanvas((shown) => !shown)}>
-                        {showAmendCanvas ? "Hide handwriting canvas" : "Add handwriting"}
-                      </button>
-                      {showAmendCanvas ? <InkCanvas onDone={(value) => { setAmendInk(value); setShowAmendCanvas(false); }} /> : null}
-                      {amendInk ? <p className="text-sm text-state-success">Handwritten amendment attached.</p> : null}
-                    </div>
-                  ) : null}
-                  <p className="text-xs text-text-secondary">
-                    Saving creates a new note dated today that supersedes this one. The original is
-                    preserved and locked.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      className="btn-primary text-xs"
-                      disabled={amendBusy || (!amendBody.trim() && !amendInk)}
-                      onClick={submitAmend}
-                    >
-                      {amendBusy ? "Saving…" : "Save amendment"}
-                    </button>
-                    <button className="btn-secondary text-xs" onClick={cancelAmend}>Cancel</button>
+              <div className="space-y-2">
+                {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
+                {n.ink ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-text-secondary">Handwritten note</p>
+                    <InkView ink={n.ink} />
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
-                  {n.ink ? (
-                    <div className="space-y-1">
-                      <p className="text-xs text-text-secondary">Handwritten note</p>
-                      <InkView ink={n.ink} />
-                    </div>
-                  ) : null}
-                </div>
-              )}
+                ) : null}
+              </div>
             </div>
           );
         })}
