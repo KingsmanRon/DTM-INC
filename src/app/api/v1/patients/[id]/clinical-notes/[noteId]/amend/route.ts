@@ -5,29 +5,44 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import {
-  encryptNoteBody, unwrapDek, zero, KeyManagementUnavailableError,
+  encryptNoteBody, encryptNoteInk, unwrapDek, zero, KeyManagementUnavailableError,
 } from "@/lib/crypto/envelope";
 import { byteaToCryptoBuffer, cryptoBufferToBase64 } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
+import { canUseHandwrittenNotes } from "@/lib/clinical-notes/features";
+import { parseInkPayload } from "@/lib/clinical-notes/ink";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const NoteAmend = z.object({
   note_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  body: z.string().min(1).max(50_000),
+  body: z.string().max(50_000).optional(),
+  ink: z.string().optional(),
+}).superRefine((input, ctx) => {
+  if (!input.body?.trim() && !input.ink) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "An amendment must contain typed text or ink." });
+  }
 });
 
 // POST /api/v1/patients/:id/clinical-notes/:noteId/amend
 //
-// Append-only edit: creates a new note that supersedes :noteId. The source
-// row is auto-finalised (so the chain has a single editable head) and the
-// new row carries amended_from_note_id = :noteId. The new row starts as
-// Unfinalised — the doctor reviews the amended wording and finalises it
-// the same way as a fresh note.
+// Append-only edit: creates a new note that supersedes :noteId. The source row
+// is auto-finalised (so the chain has a single editable head) and the new row
+// carries amended_from_note_id = :noteId. The new row starts as Unfinalised —
+// the doctor reviews the amendment and finalises it like a fresh note.
 //
-// Refuses if :noteId already has an amend pointing at it; the caller must
-// amend the latest version in the chain instead.
+// The amendment is dated TODAY by default; the original encounter date stays
+// visible via the "Supersedes <date>" label in the UI.
+//
+// The amendment itself may be typed OR handwritten. A handwritten SOURCE can
+// only be amended once it is finalised: finalising handwriting captures its
+// durable PNG client-side, which this server route cannot do, so we refuse to
+// auto-finalise an un-finalised ink source here (it would lock handwriting with
+// no durable image).
+//
+// Refuses if :noteId already has an amend pointing at it; the caller must amend
+// the latest version in the chain instead.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; noteId: string }> }
@@ -36,6 +51,15 @@ export async function POST(
     const session = await requireRole("doctor");
     const { id, noteId } = await params;
     const input = await parseJson(req, NoteAmend);
+
+    if (input.ink) {
+      if (!canUseHandwrittenNotes(session.userId)) return jsonError(404, "not_found");
+      try { parseInkPayload(input.ink); } catch (error) {
+        const code = (error as Error).message;
+        return jsonError(code === "ink_too_large" ? 413 : 400, code);
+      }
+    }
+
     const admin = getSupabaseAdmin();
 
     const { data: source, error: sourceErr } = await admin
@@ -46,7 +70,13 @@ export async function POST(
       .maybeSingle();
     if (sourceErr) return jsonError(500, "db_error", sourceErr.message);
     if (!source) return jsonError(404, "not_found");
-    if (source.encrypted_ink) return jsonError(409, "handwritten_amend_disabled", "Handwritten notes remain drafts during this rollout stage.");
+
+    // A handwritten source must already be finalised before it can be amended.
+    // Finalising ink captures its durable PNG (client-side); this route can't,
+    // so it must never auto-finalise un-finalised handwriting.
+    if (source.encrypted_ink && !source.is_finalised) {
+      return jsonError(409, "finalise_before_amend", "Finalise the handwritten note before amending it.");
+    }
 
     const { data: alreadyAmended } = await admin
       .from("clinical_notes")
@@ -77,8 +107,12 @@ export async function POST(
         }
         throw e;
       }
-      const { ciphertext, nonce } = encryptNoteBody(dek, input.body);
 
+      const encBody = input.body?.trim() ? encryptNoteBody(dek, input.body) : null;
+      const encInk = input.ink ? encryptNoteInk(dek, input.ink) : null;
+
+      // Auto-finalise a still-draft TYPED source. Ink sources reaching here are
+      // already finalised (guarded above), so no PNG-less finalise can occur.
       if (!source.is_finalised) {
         const { error: finErr } = await admin
           .from("clinical_notes")
@@ -94,8 +128,10 @@ export async function POST(
           patient_id: id,
           author_user_id: session.userId,
           note_date: input.note_date ?? new Date().toISOString().slice(0, 10),
-          encrypted_body: cryptoBufferToBase64(ciphertext),
-          nonce: cryptoBufferToBase64(nonce),
+          encrypted_body: encBody ? cryptoBufferToBase64(encBody.ciphertext) : null,
+          nonce: encBody ? cryptoBufferToBase64(encBody.nonce) : null,
+          encrypted_ink: encInk ? cryptoBufferToBase64(encInk.ciphertext) : null,
+          ink_nonce: encInk ? cryptoBufferToBase64(encInk.nonce) : null,
           dek_id: source.dek_id,
           amended_from_note_id: noteId,
         })
@@ -114,7 +150,7 @@ export async function POST(
       entityType: "clinical_notes",
       entityId: newId,
       patientId: id,
-      metadata: { amended_from_note_id: noteId },
+      metadata: { amended_from_note_id: noteId, handwritten: Boolean(input.ink) },
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });

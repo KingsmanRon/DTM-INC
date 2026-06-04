@@ -38,8 +38,10 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   const [error, setError] = useState<string | null>(null);
   const [amendingId, setAmendingId] = useState<string | null>(null);
   const [amendBody, setAmendBody] = useState("");
-  const [amendDate, setAmendDate] = useState("");
+  const [amendInk, setAmendInk] = useState<string | null>(null);
+  const [showAmendCanvas, setShowAmendCanvas] = useState(false);
   const [amendBusy, setAmendBusy] = useState(false);
+  const [exportDate, setExportDate] = useState(new Date().toISOString().slice(0, 10));
 
   const byId = useMemo(() => {
     const m = new Map<string, Note>();
@@ -125,23 +127,27 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   function startAmend(n: Note) {
     setAmendingId(n.id);
     setAmendBody(n.body);
-    setAmendDate(n.note_date);
+    setAmendInk(null);
+    setShowAmendCanvas(false);
     setError(null);
   }
   function cancelAmend() {
     setAmendingId(null);
     setAmendBody("");
-    setAmendDate("");
+    setAmendInk(null);
+    setShowAmendCanvas(false);
   }
   async function submitAmend() {
-    if (!amendingId || !amendBody.trim()) return;
+    if (!amendingId || (!amendBody.trim() && !amendInk)) return;
     setAmendBusy(true);
     setError(null);
+    // No note_date is sent — the API dates the amendment today. The original
+    // encounter date stays visible via the "Supersedes <date>" label.
     const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${amendingId}/amend`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ note_date: amendDate, body: amendBody }),
+      body: JSON.stringify({ body: amendBody.trim() || undefined, ink: amendInk ?? undefined }),
     });
     setAmendBusy(false);
     if (!res.ok) {
@@ -186,10 +192,14 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
       </div>
 
       {notesPdfEnabled ? (
-        <div className="flex justify-end">
+        <div className="flex items-end justify-end gap-2">
+          <div>
+            <label className="label">Export date</label>
+            <input type="date" className="input" value={exportDate} onChange={(e) => setExportDate(e.target.value)} />
+          </div>
           <a
             className="btn-secondary text-xs"
-            href={`/api/v1/patients/${patientId}/clinical-notes/pdf?disposition=inline`}
+            href={`/api/v1/patients/${patientId}/clinical-notes/pdf?disposition=inline&date=${exportDate}`}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -230,7 +240,7 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
                   {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && !editing && (
                     <button className="btn-secondary text-xs" onClick={() => onFinalise(n)}>Finalise</button>
                   )}
-                  {!n.ink && !isSuperseded && !editing && (
+                  {!isSuperseded && !editing && (!n.ink || n.is_finalised) && (
                     <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
                   )}
                 </div>
@@ -238,29 +248,30 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
 
               {editing ? (
                 <div className="space-y-2">
-                  <div>
-                    <label className="label">Date</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={amendDate}
-                      onChange={(e) => setAmendDate(e.target.value)}
-                    />
-                  </div>
                   <textarea
                     className="input font-mono"
                     rows={6}
+                    placeholder="Amended note — plain text or markdown"
                     value={amendBody}
                     onChange={(e) => setAmendBody(e.target.value)}
                   />
+                  {handwrittenNotesEnabled ? (
+                    <div className="space-y-2">
+                      <button type="button" className="btn-secondary text-xs" onClick={() => setShowAmendCanvas((shown) => !shown)}>
+                        {showAmendCanvas ? "Hide handwriting canvas" : "Add handwriting"}
+                      </button>
+                      {showAmendCanvas ? <InkCanvas onDone={(value) => { setAmendInk(value); setShowAmendCanvas(false); }} /> : null}
+                      {amendInk ? <p className="text-sm text-state-success">Handwritten amendment attached.</p> : null}
+                    </div>
+                  ) : null}
                   <p className="text-xs text-text-secondary">
-                    Saving creates a new note that supersedes this one. The original is preserved
-                    and locked.
+                    Saving creates a new note dated today that supersedes this one. The original is
+                    preserved and locked.
                   </p>
                   <div className="flex gap-2">
                     <button
                       className="btn-primary text-xs"
-                      disabled={amendBusy || !amendBody.trim()}
+                      disabled={amendBusy || (!amendBody.trim() && !amendInk)}
                       onClick={submitAmend}
                     >
                       {amendBusy ? "Saving…" : "Save amendment"}

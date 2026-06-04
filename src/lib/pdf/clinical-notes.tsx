@@ -1,9 +1,11 @@
 // Server-side PDF of a patient's clinical notes (Phase 5).
 //
-// Typed notes render as text; finalised handwritten notes embed their durable
-// PNG (decrypted by the route). Draft handwriting shows a placeholder, because a
-// server-side PDF has no image to embed until the note is finalised (the PNG is
-// only captured at finalisation — see migration 0028).
+// Typed notes render as flowing text on the leading page. Finalised handwritten
+// notes embed their durable PNG, each on its OWN page, sized to preserve the
+// image's true aspect ratio (never stretched). Draft handwriting shows a
+// placeholder in the flow, because a server-side PDF has no image to embed until
+// the note is finalised (the PNG is only captured at finalisation — see
+// migration 0028).
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,6 +19,22 @@ const BRAND_DARK = "#1d4d3a";
 const BRAND_ACCENT = "#2d7d5e";
 const RULE = "#cbd5e1";
 const MUTED = "#4b5563";
+
+// A4 printable area (595.28 x 841.89pt minus this page's padding). Used to fit
+// a handwriting image to its page while preserving aspect ratio.
+const IMG_MAX_W = 523;
+const IMG_MAX_H = 690;
+
+// Read a PNG's pixel dimensions straight from the IHDR chunk so the embed can
+// preserve aspect ratio without trusting @react-pdf's auto-height (the source of
+// the old multi-page stretch). Returns null for anything that isn't a PNG.
+function pngDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf.length < 24) return null;
+  if (buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(4) !== 0x0d0a1a0a) return null;
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
 
 const styles = StyleSheet.create({
   page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.4, color: "#111" },
@@ -35,7 +53,8 @@ const styles = StyleSheet.create({
   noteHead: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   noteDate: { fontFamily: "Courier", fontWeight: 700 },
   badge: { fontSize: 8, color: MUTED },
-  inkImage: { width: "100%", marginTop: 4 },
+  slimHeader: { marginBottom: 4 },
+  inkPageBody: { alignItems: "center", marginTop: 4 },
   placeholder: { fontSize: 9, color: MUTED, marginTop: 4 },
   footer: {
     position: "absolute", left: 36, right: 36, bottom: 18,
@@ -58,10 +77,17 @@ export type ClinicalNotesPdfInput = {
     inkPng: Buffer | null;
     hasInk: boolean;
   }>;
+  // When the export is scoped to a single date, shown alongside the title.
+  dateLabel?: string;
 };
 
 export function ClinicalNotesPdfDoc(input: ClinicalNotesPdfInput) {
-  const { practice, fileNumber, patientName, notes } = input;
+  const { practice, fileNumber, patientName, notes, dateLabel } = input;
+  // Finalised handwriting (has a durable PNG) gets its own page; everything
+  // else — typed notes and draft handwriting placeholders — flows on the lead.
+  const flowNotes = notes.filter((n) => !n.inkPng);
+  const imageNotes = notes.filter((n) => n.inkPng);
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -81,31 +107,66 @@ export function ClinicalNotesPdfDoc(input: ClinicalNotesPdfInput) {
         <View style={styles.rule} fixed />
         <View style={styles.ruleThin} fixed />
 
-        <Text style={styles.title}>Clinical notes — {patientName}</Text>
+        <Text style={styles.title}>Clinical notes — {patientName}{dateLabel ? ` · ${dateLabel}` : ""}</Text>
 
         {notes.length === 0 ? (
-          <Text>No clinical notes on record.</Text>
-        ) : notes.map((n, i) => (
-          <View key={i} style={styles.note}>
-            <View style={styles.noteHead}>
-              <Text style={styles.noteDate}>{n.note_date}</Text>
-              <Text style={styles.badge}>{n.is_finalised ? "Finalised" : "Unfinalised"}</Text>
-            </View>
-            {n.body ? n.body.split("\n").map((line, j) => <Text key={j}>{line || " "}</Text>) : null}
-            {n.inkPng ? (
-              // eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image, not an HTML img
-              <Image src={{ data: n.inkPng, format: "png" }} style={styles.inkImage} />
-            ) : n.hasInk ? (
-              <Text style={styles.placeholder}>[Handwritten draft — finalise the note to include the handwriting in the record.]</Text>
+          <Text>No clinical notes on record{dateLabel ? ` for ${dateLabel}` : ""}.</Text>
+        ) : (
+          <>
+            {flowNotes.map((n, i) => (
+              <View key={i} style={styles.note}>
+                <View style={styles.noteHead}>
+                  <Text style={styles.noteDate}>{n.note_date}</Text>
+                  <Text style={styles.badge}>{n.is_finalised ? "Finalised" : "Unfinalised"}</Text>
+                </View>
+                {n.body ? n.body.split("\n").map((line, j) => <Text key={j}>{line || " "}</Text>) : null}
+                {n.hasInk ? (
+                  <Text style={styles.placeholder}>[Handwritten draft — finalise the note to include the handwriting in the record.]</Text>
+                ) : null}
+              </View>
+            ))}
+            {flowNotes.length === 0 && imageNotes.length > 0 ? (
+              <Text style={styles.placeholder}>
+                Handwritten note{imageNotes.length > 1 ? "s" : ""} on the following page{imageNotes.length > 1 ? "s" : ""}.
+              </Text>
             ) : null}
-          </View>
-        ))}
+          </>
+        )}
 
         <View style={styles.footer} fixed>
           <Text>{practice.name} · POPIA-protected · File {fileNumber}</Text>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>
+
+      {imageNotes.map((n, i) => {
+        const png = n.inkPng as Buffer;
+        const dim = pngDimensions(png);
+        // Fit-to-page while preserving the source ratio. min() of both axes
+        // guarantees the whole image fits without any disproportionate scaling.
+        const scale = dim ? Math.min(IMG_MAX_W / dim.width, IMG_MAX_H / dim.height) : 1;
+        const displayW = dim ? dim.width * scale : IMG_MAX_W;
+        const displayH = dim ? dim.height * scale : IMG_MAX_H;
+        return (
+          <Page key={`ink-${i}`} size="A4" style={styles.page}>
+            <View style={styles.slimHeader}>
+              <Text style={styles.doctorLine}>{practice.doctorName} — {practice.qualifications}</Text>
+              <Text style={styles.practiceMeta}>
+                {patientName} · File {fileNumber} · {n.note_date} · {n.is_finalised ? "Finalised" : "Unfinalised"}
+              </Text>
+            </View>
+            <View style={styles.ruleThin} />
+            <View style={styles.inkPageBody}>
+              {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image, not an HTML img */}
+              <Image src={{ data: png, format: "png" }} style={{ width: displayW, height: displayH }} />
+            </View>
+            <View style={styles.footer} fixed>
+              <Text>{practice.name} · POPIA-protected · File {fileNumber}</Text>
+              <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+            </View>
+          </Page>
+        );
+      })}
     </Document>
   );
 }

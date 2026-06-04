@@ -22,6 +22,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const session = await requireRole("doctor");
     const { id } = await params;
     if (!getHandwrittenNotesFeatures().pdfEnabled) return jsonError(404, "not_found");
+
+    // Optional ?date=YYYY-MM-DD scopes the export to a single day's notes.
+    // Absent => export the full record (preserves the original behaviour).
+    const dateParam = req.nextUrl.searchParams.get("date");
+    if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      return jsonError(400, "invalid_date", "Export date must be in YYYY-MM-DD format.");
+    }
+    const dateFilter = dateParam || null;
+
     const supabase = await getSupabaseServer();
 
     const [{ data: practice }, { data: patient, error: patientErr }] = await Promise.all([
@@ -31,11 +40,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (patientErr) return jsonError(500, "db_error", patientErr.message);
     if (!patient) return jsonError(404, "not_found");
 
-    const { data: notes, error } = await supabase
+    let notesQuery = supabase
       .from("clinical_notes")
       .select("id, note_date, encrypted_body, nonce, encrypted_ink, encrypted_ink_png, ink_png_nonce, is_finalised, created_at")
-      .eq("patient_id", id)
-      .order("created_at", { ascending: true });
+      .eq("patient_id", id);
+    if (dateFilter) notesQuery = notesQuery.eq("note_date", dateFilter);
+    const { data: notes, error } = await notesQuery.order("created_at", { ascending: true });
     if (error) return jsonError(500, "db_error", error.message);
 
     const items: Array<{ note_date: string; is_finalised: boolean; body: string; inkPng: Buffer | null; hasInk: boolean }> = [];
@@ -83,6 +93,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       fileNumber: patient.file_number,
       patientName: [patient.title, patient.first_names, patient.surname].filter(Boolean).join(" "),
       notes: items,
+      dateLabel: dateFilter ?? undefined,
     });
 
     const sha256 = createHash("sha256").update(pdf).digest("hex");
@@ -93,7 +104,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       action: "note_read",
       entityType: "clinical_notes",
       patientId: id,
-      metadata: { kind: "pdf_export", count: items.length, sha256, bytes: pdf.length },
+      metadata: { kind: "pdf_export", count: items.length, sha256, bytes: pdf.length, date: dateFilter },
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });
@@ -103,7 +114,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `${disposition}; filename="clinical-notes-${patient.file_number}.pdf"`,
+        "Content-Disposition": `${disposition}; filename="clinical-notes-${patient.file_number}${dateFilter ? `-${dateFilter}` : ""}.pdf"`,
         "Cache-Control": "no-store",
         "X-Content-SHA256": sha256,
       },
