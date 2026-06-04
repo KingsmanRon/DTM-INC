@@ -29,7 +29,7 @@ begin
   ) then
     raise exception 'duplicate_patient_identity_existing_rows'
       using errcode = '23505',
-            detail = 'Resolve existing duplicate patients before applying patients_unique_identity_idx.';
+            detail = 'Run supabase/remediation/duplicate_patient_identity_cleanup.sql to inspect/remediate duplicate patient identities before applying patients_unique_identity_idx.';
   end if;
 end $$;
 
