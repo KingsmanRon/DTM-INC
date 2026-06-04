@@ -3,8 +3,53 @@ import { createHash } from "node:crypto";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-import { OnboardingPayload } from "@/lib/validation/patient";
+import { OnboardingPayload, type OnboardingPayload as OnboardingPayloadType } from "@/lib/validation/patient";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
+
+
+type PatientIdentity = {
+  idType: "sa_id" | "passport";
+  idNumber: string;
+  idCountry: string | null;
+};
+
+function normalizeOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toUpperCase() : undefined;
+}
+
+function normalizeOnboardingPayload(payload: OnboardingPayloadType): OnboardingPayloadType {
+  return {
+    ...payload,
+    section_a: {
+      ...payload.section_a,
+      is_minor: payload.section_a.is_minor ?? false,
+      id_number: payload.section_a.id_number.trim().toUpperCase(),
+      id_country: payload.section_a.id_type === "passport" ? normalizeOptional(payload.section_a.id_country) : undefined,
+    },
+    section_b: {
+      ...payload.section_b,
+      id_number: payload.section_b.id_number.trim().toUpperCase(),
+    },
+  };
+}
+
+function patientIdentity(payload: OnboardingPayloadType): PatientIdentity | null {
+  const { id_type: idType, id_number: idNumber, id_country: idCountry } = payload.section_a;
+  if (idType === "none_minor") return null;
+  const normalizedIdNumber = idNumber.trim().toUpperCase();
+  if (!normalizedIdNumber) return null;
+  return {
+    idType,
+    idNumber: normalizedIdNumber,
+    idCountry: idType === "passport" ? (normalizeOptional(idCountry) ?? null) : null,
+  };
+}
+
+function isPatientIdentityConflict(error: { code?: string; message?: string; details?: string }): boolean {
+  const text = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return error.code === "23505" && text.includes("patients_unique_identity_idx");
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +91,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole(["doctor", "staff"]);
-    const payload = await parseJson(req, OnboardingPayload);
+    const parsedPayload = (await parseJson(req, OnboardingPayload)) as OnboardingPayloadType;
+    const payload = normalizeOnboardingPayload(parsedPayload);
     const { consent } = payload;
 
     // Consent verification — re-derive the hash server-side from the
@@ -62,6 +108,34 @@ export async function POST(req: NextRequest) {
     if (settingsErr || !settings) {
       return jsonError(500, "consent_settings_unavailable", settingsErr?.message);
     }
+
+    const identity = patientIdentity(payload);
+    if (identity) {
+      let duplicateQuery = supabase
+        .from("patients")
+        .select("id, file_number, archived_at")
+        .eq("id_type", identity.idType)
+        .eq("id_number", identity.idNumber)
+        .limit(1);
+      if (identity.idType === "passport") {
+        duplicateQuery = identity.idCountry
+          ? duplicateQuery.eq("id_country", identity.idCountry)
+          : duplicateQuery.is("id_country", null);
+      }
+
+      const { data: duplicatePatients, error: duplicateErr } = await duplicateQuery;
+      if (duplicateErr) return jsonError(500, "duplicate_check_failed", duplicateErr.message);
+      const duplicate = duplicatePatients?.[0];
+      if (duplicate) {
+        return jsonError(
+          409,
+          "duplicate_patient",
+          `A patient with this ID already exists as file ${duplicate.file_number}. Open the existing record instead of creating a duplicate.`,
+          { existing: { id: duplicate.id, file_number: duplicate.file_number, archived_at: duplicate.archived_at } }
+        );
+      }
+    }
+
     const serverHash = createHash("sha256")
       .update(`${settings.active_consent_version}::${settings.active_consent_body}`, "utf8")
       .digest("hex");
@@ -86,7 +160,16 @@ export async function POST(req: NextRequest) {
       p_dependants: payload.dependants ?? [],
       p_consent: consent,
     });
-    if (error) return jsonError(500, "onboarding_failed", error.message);
+    if (error) {
+      if (isPatientIdentityConflict(error)) {
+        return jsonError(
+          409,
+          "duplicate_patient",
+          "A patient with this ID already exists. Search for and open the existing record instead of creating a duplicate."
+        );
+      }
+      return jsonError(500, "onboarding_failed", error.message);
+    }
 
     // RPC returns setof (patient_id, file_number); supabase-js surfaces it as
     // an array of one row.
