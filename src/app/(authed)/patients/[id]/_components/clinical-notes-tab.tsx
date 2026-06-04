@@ -23,9 +23,11 @@ type Note = {
 //
 // Clinical notes are append-only by policy: "Unfinalised" means "not yet
 // locked" (only the Finalise transition is permitted on the row itself).
-// Amendment authoring has been removed, but existing amend chains in the
-// data are still rendered with a "Supersedes" label on the newer note and
-// a "Superseded" badge on the original via amended_from_note_id.
+// To change wording on a TYPED note, the doctor uses Amend, which creates a
+// new note that supersedes the original via amended_from_note_id; the
+// original is auto-finalised by the API. The chain renders with a
+// "Supersedes" label on the new note and a "Superseded" badge on the
+// original. Handwritten notes cannot be amended — amend is typed-only.
 export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled }: { patientId: string; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [body, setBody] = useState("");
@@ -35,6 +37,9 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [amendingId, setAmendingId] = useState<string | null>(null);
+  const [amendBody, setAmendBody] = useState("");
+  const [amendBusy, setAmendBusy] = useState(false);
   const [exportDate, setExportDate] = useState(new Date().toISOString().slice(0, 10));
 
   const byId = useMemo(() => {
@@ -118,6 +123,39 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
     await refresh();
   }
 
+  // Amend is typed-only — handwritten notes are not amendable, so the Amend
+  // button is never shown for an ink note (see render below).
+  function startAmend(n: Note) {
+    setAmendingId(n.id);
+    setAmendBody(n.body);
+    setError(null);
+  }
+  function cancelAmend() {
+    setAmendingId(null);
+    setAmendBody("");
+  }
+  async function submitAmend() {
+    if (!amendingId || !amendBody.trim()) return;
+    setAmendBusy(true);
+    setError(null);
+    // No note_date is sent — the API dates the amendment today. The original
+    // encounter date stays visible via the "Supersedes <date>" label.
+    const res = await fetch(`/api/v1/patients/${patientId}/clinical-notes/${amendingId}/amend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ body: amendBody.trim() }),
+    });
+    setAmendBusy(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      setError(err?.message ?? err?.error ?? "Could not amend note.");
+      return;
+    }
+    cancelAmend();
+    await refresh();
+  }
+
   return (
     <div className="space-y-4">
       <div className="card space-y-3">
@@ -175,6 +213,7 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
         ) : notes.map((n) => {
           const isSuperseded = supersededIds.has(n.id);
           const supersedes = n.amended_from_note_id ? byId.get(n.amended_from_note_id) : null;
+          const editing = amendingId === n.id;
           return (
             <div key={n.id} className={`card${isSuperseded ? " opacity-70" : ""}`}>
               <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
@@ -195,21 +234,51 @@ export function ClinicalNotesTab({ patientId, handwrittenNotesEnabled, handwritt
                   ) : null}
                 </div>
                 <div className="flex gap-2">
-                  {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && (
+                  {(!n.ink || handwrittenFinaliseEnabled) && !n.is_finalised && !editing && (
                     <button className="btn-secondary text-xs" onClick={() => onFinalise(n)}>Finalise</button>
+                  )}
+                  {/* Amend is typed-only: never offered for handwritten (ink) notes. */}
+                  {!isSuperseded && !editing && !n.ink && (
+                    <button className="btn-secondary text-xs" onClick={() => startAmend(n)}>Amend</button>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
-                {n.ink ? (
-                  <div className="space-y-1">
-                    <p className="text-xs text-text-secondary">Handwritten note</p>
-                    <InkView ink={n.ink} />
+              {editing ? (
+                <div className="space-y-2">
+                  <textarea
+                    className="input font-mono"
+                    rows={6}
+                    placeholder="Amended note — plain text or markdown"
+                    value={amendBody}
+                    onChange={(e) => setAmendBody(e.target.value)}
+                  />
+                  <p className="text-xs text-text-secondary">
+                    Saving creates a new note dated today that supersedes this one. The original is
+                    preserved and locked.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn-primary text-xs"
+                      disabled={amendBusy || !amendBody.trim()}
+                      onClick={submitAmend}
+                    >
+                      {amendBusy ? "Saving…" : "Save amendment"}
+                    </button>
+                    <button className="btn-secondary text-xs" onClick={cancelAmend}>Cancel</button>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {n.body ? <pre className="whitespace-pre-wrap text-sm font-sans">{n.body}</pre> : null}
+                  {n.ink ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-text-secondary">Handwritten note</p>
+                      <InkView ink={n.ink} />
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           );
         })}
