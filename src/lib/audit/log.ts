@@ -25,7 +25,8 @@ export type AuditAction =
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"
   | "practice_settings_update" | "onboarding_pdf_generate"
   | "break_glass_request" | "break_glass_access"
-  | "consent_capture" | "access_denied";
+  | "consent_capture" | "access_denied"
+  | "billing_export_generate" | "billing_export_item_update" | "billing_export_mark_returned";
 
 export type AuditInput = {
   actorUserId: string | null;
