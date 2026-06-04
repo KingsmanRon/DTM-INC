@@ -93,19 +93,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const session = await requireRole("doctor");
     const { id } = await params;
     const supabase = await getSupabaseServer();
+    const includeVoided = req.nextUrl.searchParams.get("include_voided") === "true";
 
-    const { data: notes, error } = await supabase
+    let query = supabase
       .from("clinical_notes")
-      .select("id, patient_id, author_user_id, note_date, encrypted_body, nonce, encrypted_ink, ink_nonce, dek_id, is_finalised, finalised_at, amended_from_note_id, created_at, updated_at")
-      .eq("patient_id", id)
-      .order("created_at", { ascending: false });
+      .select("id, patient_id, author_user_id, note_date, encrypted_body, nonce, encrypted_ink, ink_nonce, dek_id, is_finalised, finalised_at, amended_from_note_id, voided_at, voided_by, void_reason, created_at, updated_at")
+      .eq("patient_id", id);
+    if (!includeVoided) query = query.is("voided_at", null);
+
+    const { data: notes, error } = await query.order("created_at", { ascending: false });
     if (error) {
       if (isMissingSchemaError(error)) return jsonError(503, "notes_schema_unavailable", "Clinical notes schema is not deployed.");
       return jsonError(500, "db_error", error.message);
     }
 
     // Decrypt each note. All notes under a patient share the same DEK.
-    const results: Array<{ id: string; note_date: string; body: string; ink: string | null; is_finalised: boolean; amended_from_note_id: string | null; created_at: string; updated_at: string }> = [];
+    const voidedByIds = Array.from(new Set((notes ?? []).map((n) => n.voided_by).filter(Boolean) as string[]));
+    const voidedByNames = new Map<string, string>();
+    if (voidedByIds.length > 0) {
+      const admin = getSupabaseAdmin();
+      const { data: users } = await admin
+        .from("app_users")
+        .select("id, full_name")
+        .in("id", voidedByIds);
+      for (const user of users ?? []) voidedByNames.set(user.id, user.full_name);
+    }
+
+    const results: Array<{ id: string; note_date: string; body: string; ink: string | null; is_finalised: boolean; amended_from_note_id: string | null; voided_at: string | null; voided_by: string | null; voided_by_name: string | null; void_reason: string | null; created_at: string; updated_at: string }> = [];
     if (notes && notes.length > 0) {
       let dekHandle: { dek: Buffer } | null = null;
       try {
@@ -132,6 +146,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             ink,
             is_finalised: n.is_finalised,
             amended_from_note_id: n.amended_from_note_id,
+            voided_at: n.voided_at,
+            voided_by: n.voided_by,
+            voided_by_name: n.voided_by ? voidedByNames.get(n.voided_by) ?? null : null,
+            void_reason: n.void_reason,
             created_at: n.created_at,
             updated_at: n.updated_at,
           });
@@ -147,7 +165,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       action: "note_read",
       entityType: "clinical_notes",
       patientId: id,
-      metadata: { count: results.length },
+      metadata: { count: results.length, include_voided: includeVoided },
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });
