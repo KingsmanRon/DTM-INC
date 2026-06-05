@@ -32,6 +32,10 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [category, setCategory] = useState("other");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch(`/api/v1/patients/${patientId}/documents`, { credentials: "same-origin" });
@@ -94,6 +98,32 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
     window.open(j.url, "_blank", "noopener,noreferrer");
   }
 
+  function startRename(d: Doc) { setEditingId(d.id); setDraftName(d.original_filename); setRenameError(null); }
+  function cancelRename() { setEditingId(null); setDraftName(""); setRenameError(null); }
+
+  async function onRename(docId: string) {
+    const name = draftName.trim();
+    if (!name) { setRenameError("Name can't be empty."); return; }
+    setRenaming(true); setRenameError(null);
+    try {
+      const res = await fetch(`/api/v1/patients/${patientId}/documents/${docId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ filename: name }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setRenameError(j.message ?? "Couldn't rename — please try again.");
+        return;
+      }
+      setEditingId(null); setDraftName("");
+      await refresh();
+    } finally {
+      setRenaming(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="card flex items-end gap-3">
@@ -118,14 +148,34 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         {docs.length === 0 ? <p className="text-text-secondary text-sm">No documents yet.</p> : (
           <ul className="divide-y divide-border-subtle">
             {docs.map((d) => (
-              <li key={d.id} className="py-2 flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{d.original_filename}</div>
-                  <div className="text-xs text-text-secondary">
-                    {d.category.replace(/_/g, " ")} · {(d.file_size / 1024).toFixed(0)} KB · {new Date(d.uploaded_at).toLocaleString()}
+              <li key={d.id} className="py-2 flex items-center justify-between gap-3">
+                {editingId === d.id ? (
+                  <div className="flex-1">
+                    <form className="flex items-center gap-2"
+                          onSubmit={(e) => { e.preventDefault(); onRename(d.id); }}>
+                      <input className="input flex-1" value={draftName} autoFocus disabled={renaming}
+                             aria-label="New file name"
+                             onChange={(e) => setDraftName(e.target.value)}
+                             onKeyDown={(e) => { if (e.key === "Escape") cancelRename(); }} />
+                      <button type="submit" className="btn-secondary" disabled={renaming}>Save</button>
+                      <button type="button" className="btn-secondary" disabled={renaming} onClick={cancelRename}>Cancel</button>
+                    </form>
+                    {renameError ? <p className="text-state-danger text-xs mt-1">{renameError}</p> : null}
                   </div>
-                </div>
-                <button className="btn-secondary" onClick={() => openDoc(d.id)}>View</button>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{d.original_filename}</div>
+                      <div className="text-xs text-text-secondary">
+                        {d.category.replace(/_/g, " ")} · {(d.file_size / 1024).toFixed(0)} KB · {new Date(d.uploaded_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button className="btn-secondary" onClick={() => startRename(d)}>Rename</button>
+                      <button className="btn-secondary" onClick={() => openDoc(d.id)}>View</button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
           </ul>

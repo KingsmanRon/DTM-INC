@@ -48,3 +48,28 @@ export function normaliseDocumentMime(mime: string | null | undefined): string |
   if (mime === "image/heif") return "image/heic";
   return mime;
 }
+
+// Clean a user-supplied display name for a document rename: drop control
+// characters, collapse whitespace runs, trim, and bound the length. Returns
+// null when nothing usable remains so the caller can reject an empty rename.
+// Unlike safeStorageName this KEEPS spaces and punctuation — the whole point of
+// a rename is a human-readable label; the storage key is separate and unchanged.
+export function cleanDocumentName(raw: string): string | null {
+  const cleaned = raw
+    .replace(/[\x00-\x1f\x7f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+  return cleaned.length ? cleaned : null;
+}
+
+// Keep a renamed file openable by carrying over the original extension. Appends
+// `reference`'s extension to `name` only when `name` doesn't already end with
+// that same extension (case-insensitive). Never strips or rewrites an extension
+// the user typed, so a name like "v1.2" is left intact (gains the real ext).
+export function withPreservedExtension(name: string, reference: string): string {
+  const ext = /\.([A-Za-z0-9]{1,8})$/.exec(reference)?.[1];
+  if (!ext) return name;
+  const alreadyHasExt = new RegExp(`\\.${ext}$`, "i").test(name);
+  return alreadyHasExt ? name : `${name}.${ext}`;
+}
