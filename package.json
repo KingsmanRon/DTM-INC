@@ -19,6 +19,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "clsx": "^2.1.1",
+    "file-type": "22.0.1",
     "next": "^15.1.6",
     "perfect-freehand": "^1.2.3",
     "react": "^19.0.0",
