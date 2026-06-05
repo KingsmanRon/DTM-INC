@@ -63,13 +63,22 @@ export function cleanDocumentName(raw: string): string | null {
   return cleaned.length ? cleaned : null;
 }
 
-// Keep a renamed file openable by carrying over the original extension. Appends
-// `reference`'s extension to `name` only when `name` doesn't already end with
-// that same extension (case-insensitive). Never strips or rewrites an extension
-// the user typed, so a name like "v1.2" is left intact (gains the real ext).
-export function withPreservedExtension(name: string, reference: string): string {
-  const ext = /\.([A-Za-z0-9]{1,8})$/.exec(reference)?.[1];
-  if (!ext) return name;
-  const alreadyHasExt = new RegExp(`\\.${ext}$`, "i").test(name);
-  return alreadyHasExt ? name : `${name}.${ext}`;
+// Trailing document/image extensions a user might type into the rename box.
+// Used to strip a typed extension so it can't survive as part of the base name.
+// Deliberately narrow: a name like "v1.2" or "report.2024" keeps its tail.
+const TYPED_EXTENSION = /\.(pdf|jpe?g|png|heic|heif|webp|gif|tiff?|bmp)$/i;
+
+// Compute the final stored name for a rename. The extension is NOT the user's
+// to change: we clean their input, strip any document/image extension they
+// typed (so re-typing or changing it can't produce "name.pdf.png"), then append
+// the file's real extension — read from the current stored name. Returns null
+// when no usable base remains (empty or extension-only input). When the current
+// name has no extension, the cleaned input is returned unchanged.
+export function forceExtension(rawName: string, currentName: string): string | null {
+  const cleaned = cleanDocumentName(rawName);
+  if (!cleaned) return null;
+  const ext = /\.([A-Za-z0-9]{1,8})$/.exec(currentName)?.[1];
+  if (!ext) return cleaned;
+  const base = cleaned.replace(TYPED_EXTENSION, "").trim();
+  return base ? `${base}.${ext}` : null;
 }

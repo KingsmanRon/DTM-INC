@@ -22,6 +22,15 @@ function friendlyUploadError(code: unknown): string {
   }
 }
 
+// Split a filename into an editable base and a display-only extension, so the
+// rename UI can lock the extension. Match mirrors the server's forceExtension
+// (1–8 alphanumerics after a dot).
+function splitFileName(filename: string): { base: string; ext: string } {
+  const m = /^(.*)\.([A-Za-z0-9]{1,8})$/.exec(filename);
+  if (m && m[1]) return { base: m[1], ext: m[2] ?? "" };
+  return { base: filename, ext: "" };
+}
+
 const CATEGORIES = [
   "id_copy", "medical_aid_card", "consent_form", "referral_letter",
   "pathology_result", "imaging_report", "correspondence", "other",
@@ -98,7 +107,9 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
     window.open(j.url, "_blank", "noopener,noreferrer");
   }
 
-  function startRename(d: Doc) { setEditingId(d.id); setDraftName(d.original_filename); setRenameError(null); }
+  // Edit the base name only — the extension is shown locked beside the field
+  // and re-applied server-side, so it can't be changed or duplicated.
+  function startRename(d: Doc) { setEditingId(d.id); setDraftName(splitFileName(d.original_filename).base); setRenameError(null); }
   function cancelRename() { setEditingId(null); setDraftName(""); setRenameError(null); }
 
   async function onRename(docId: string) {
@@ -147,7 +158,9 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         <h3 className="section-title mb-3">Documents on file</h3>
         {docs.length === 0 ? <p className="text-text-secondary text-sm">No documents yet.</p> : (
           <ul className="divide-y divide-border-subtle">
-            {docs.map((d) => (
+            {docs.map((d) => {
+              const ext = splitFileName(d.original_filename).ext;
+              return (
               <li key={d.id} className="py-2 flex items-center justify-between gap-3">
                 {editingId === d.id ? (
                   <div className="flex-1">
@@ -157,6 +170,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                              aria-label="New file name"
                              onChange={(e) => setDraftName(e.target.value)}
                              onKeyDown={(e) => { if (e.key === "Escape") cancelRename(); }} />
+                      {ext ? <span className="text-text-secondary text-sm shrink-0">.{ext}</span> : null}
                       <button type="submit" className="btn-secondary" disabled={renaming}>Save</button>
                       <button type="button" className="btn-secondary" disabled={renaming} onClick={cancelRename}>Cancel</button>
                     </form>
@@ -177,7 +191,8 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                   </>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

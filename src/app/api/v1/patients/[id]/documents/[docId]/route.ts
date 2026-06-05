@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
-import { cleanDocumentName, withPreservedExtension } from "@/lib/documents/constants";
+import { forceExtension } from "@/lib/documents/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,9 +69,6 @@ export async function PATCH(
     const { id, docId } = await params;
     const { filename } = await parseJson(req, RenameSchema);
 
-    const cleaned = cleanDocumentName(filename);
-    if (!cleaned) return jsonError(400, "invalid_filename", "Please enter a file name.");
-
     const supabase = await getSupabaseServer();
     const { data: existing, error: readErr } = await supabase
       .from("patient_documents")
@@ -82,7 +79,10 @@ export async function PATCH(
       .maybeSingle();
     if (readErr || !existing) return jsonError(404, "not_found");
 
-    const newName = withPreservedExtension(cleaned, existing.original_filename);
+    // The extension is fixed to the real file type — strip anything the user
+    // typed and re-apply the current file's extension (see forceExtension).
+    const newName = forceExtension(filename, existing.original_filename);
+    if (!newName) return jsonError(400, "invalid_filename", "Please enter a file name.");
 
     // No change → don't write a spurious row update or audit entry.
     if (newName === existing.original_filename) {

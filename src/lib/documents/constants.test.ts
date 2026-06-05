@@ -3,10 +3,10 @@ import {
   ALLOWED_DOCUMENT_MIME_SET,
   cleanDocumentName,
   DOCUMENT_CATEGORY_SET,
+  forceExtension,
   MAX_DOCUMENT_BYTES,
   normaliseDocumentMime,
   safeStorageName,
-  withPreservedExtension,
 } from "./constants";
 
 describe("document constants", () => {
@@ -70,25 +70,33 @@ describe("cleanDocumentName", () => {
   });
 });
 
-describe("withPreservedExtension", () => {
-  it("appends the original extension when the new name lacks it", () => {
-    expect(withPreservedExtension("John Smith ID copy", "Scan_20260605.png")).toBe("John Smith ID copy.png");
+describe("forceExtension", () => {
+  it("appends the file's real extension when none is typed", () => {
+    expect(forceExtension("John Smith ID copy", "Scan_20260605.png")).toBe("John Smith ID copy.png");
   });
 
-  it("does not duplicate an extension that is already present (case-insensitive)", () => {
-    expect(withPreservedExtension("report.png", "x.png")).toBe("report.png");
-    expect(withPreservedExtension("report.PNG", "x.png")).toBe("report.PNG");
+  it("keeps a single extension when the user retypes the real one", () => {
+    expect(forceExtension("report.png", "x.png")).toBe("report.png");
+    expect(forceExtension("report.PNG", "x.png")).toBe("report.png");
   });
 
-  it("never mangles a dotted name that isn't the file extension", () => {
-    expect(withPreservedExtension("v1.2", "x.png")).toBe("v1.2.png");
+  it("forces the real extension when the user types a different one — no double", () => {
+    expect(forceExtension("scan.pdf", "x.png")).toBe("scan.png");
+    expect(forceExtension("report.jpg", "photo.png")).toBe("report.png");
   });
 
-  it("appends the real extension even if the user typed a different one", () => {
-    expect(withPreservedExtension("scan.pdf", "x.png")).toBe("scan.pdf.png");
+  it("leaves a non-extension dotted tail intact", () => {
+    expect(forceExtension("v1.2", "x.png")).toBe("v1.2.png");
+    expect(forceExtension("Visit 2024.report", "x.png")).toBe("Visit 2024.report.png");
   });
 
-  it("leaves the name untouched when the reference has no extension", () => {
-    expect(withPreservedExtension("notes", "referencewithoutext")).toBe("notes");
+  it("returns null for empty or extension-only input", () => {
+    expect(forceExtension("", "x.png")).toBeNull();
+    expect(forceExtension("   ", "x.png")).toBeNull();
+    expect(forceExtension(".png", "x.png")).toBeNull();
+  });
+
+  it("returns the cleaned name unchanged when the current file has no extension", () => {
+    expect(forceExtension("notes", "referencewithoutext")).toBe("notes");
   });
 });
