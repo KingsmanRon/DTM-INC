@@ -1,8 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { MAX_DOCUMENT_BYTES } from "@/lib/documents/constants";
+
+const BUCKET = "patient-documents";
 
 type Doc = { id: string; category: string; original_filename: string; file_size: number; uploaded_at: string };
+
+// Map server error codes to messages a clinician can act on. Falls back to a
+// generic line for anything unexpected (the old code surfaced raw codes).
+function friendlyUploadError(code: unknown): string {
+  switch (code) {
+    case "file_too_large": return "File too large — max 25 MB.";
+    case "unsupported_media_type": return "Unsupported file type. Use PDF, JPG, PNG, HEIC or WEBP.";
+    case "invalid_file_content": return "That file's contents don't match a supported document type.";
+    case "invalid_category": return "Please choose a valid category.";
+    case "empty_file": return "That file is empty.";
+    case "uploaded_object_not_found": return "The upload didn't complete — please try again.";
+    default: return "Upload failed.";
+  }
+}
 
 const CATEGORIES = [
   "id_copy", "medical_aid_card", "consent_form", "referral_letter",
@@ -23,17 +41,50 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
 
   async function onUpload(file: File) {
     setBusy(true); setError(null);
-    const fd = new FormData();
-    fd.set("file", file);
-    fd.set("category", category);
-    const res = await fetch(`/api/v1/patients/${patientId}/documents`, {
-      method: "POST",
-      body: fd,
-      credentials: "same-origin",
-    });
-    setBusy(false);
-    if (!res.ok) { const j = await res.json().catch(() => ({})); setError(j.error ?? "Upload failed"); return; }
-    await refresh();
+    try {
+      // 0. Pre-flight size check — friendlier than a round-trip to fail.
+      if (file.size > MAX_DOCUMENT_BYTES) { setError("File too large — max 25 MB."); return; }
+
+      // 1. Ask the API for a single-use signed upload URL (tiny JSON request,
+      //    no file bytes — so it never hits Vercel's serverless body cap).
+      const initRes = await fetch(`/api/v1/patients/${patientId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ filename: file.name, category, mime: file.type, size: file.size }),
+      });
+      if (!initRes.ok) {
+        const j = await initRes.json().catch(() => ({}));
+        setError(friendlyUploadError(j.error));
+        return;
+      }
+      const { path, token } = await initRes.json();
+
+      // 2. Send the bytes straight to Supabase Storage. Browser -> Supabase,
+      //    never through our function, so the 4.5 MB cap is out of the path.
+      const supabase = getSupabaseBrowser();
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET)
+        .uploadToSignedUrl(path, token, file, { contentType: file.type });
+      if (upErr) { setError("Upload failed while sending the file."); return; }
+
+      // 3. Finalise: server re-checks size, sniffs content, hashes and records.
+      const finRes = await fetch(`/api/v1/patients/${patientId}/documents/finalize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ storageKey: path, filename: file.name, category, mime: file.type }),
+      });
+      if (!finRes.ok) {
+        const j = await finRes.json().catch(() => ({}));
+        setError(friendlyUploadError(j.error));
+        return;
+      }
+
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function openDoc(docId: string) {
@@ -55,7 +106,8 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         <div>
           <label className="label">File (PDF, JPG, PNG, HEIC, WEBP — max 25 MB)</label>
           <input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/webp"
-                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }} />
+                 disabled={busy}
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload(f); }} />
         </div>
         {busy ? <span className="text-text-secondary text-sm">Uploading…</span> : null}
         {error ? <span className="text-state-danger text-sm">{error}</span> : null}

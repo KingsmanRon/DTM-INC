@@ -1,19 +1,20 @@
 import type { NextRequest } from "next/server";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
-import { writeAudit } from "@/lib/audit/log";
-import { clientIp, handleRouteError, jsonError, jsonOk } from "@/lib/api/http";
+import { handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
+import {
+  ALLOWED_DOCUMENT_MIME_SET,
+  DOCUMENT_CATEGORY_SET,
+  MAX_DOCUMENT_BYTES,
+  safeStorageName,
+} from "@/lib/documents/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ALLOWED = new Set(["application/pdf", "image/jpeg", "image/png", "image/heic", "image/webp"]);
-const MAX_BYTES = 25 * 1024 * 1024;
-const CATEGORIES = new Set([
-  "id_copy", "medical_aid_card", "consent_form", "referral_letter",
-  "pathology_result", "imaging_report", "correspondence", "other",
-]);
+const BUCKET = "patient-documents";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -33,58 +34,36 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
+// Step 1 of the signed-URL upload flow. The browser sends only file *metadata*
+// (a few hundred bytes) — never the bytes — so this request stays far under
+// Vercel's ~4.5 MB serverless body cap that broke the old proxy-through-the-
+// function design (it returned a platform 413 before our 25 MB check could run).
+// We validate, mint a patient-scoped storage key the client cannot repoint at
+// another patient, and hand back a single-use signed upload URL. The bytes then
+// go browser -> Supabase directly; the row + audit are written by /finalize.
+const InitSchema = z.object({
+  filename: z.string().min(1).max(300),
+  category: z.string(),
+  mime: z.string(),
+  size: z.number().int().positive(),
+});
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["doctor", "staff"]);
+    await requireRole(["doctor", "staff"]);
     const { id } = await params;
-    const form = await req.formData();
-    const file = form.get("file");
-    const category = String(form.get("category") ?? "");
+    const body = await parseJson(req, InitSchema);
 
-    if (!(file instanceof File)) return jsonError(400, "missing_file");
-    if (!CATEGORIES.has(category)) return jsonError(400, "invalid_category");
-    if (!ALLOWED.has(file.type)) return jsonError(415, "unsupported_media_type");
-    if (file.size > MAX_BYTES) return jsonError(413, "file_too_large");
+    if (!ALLOWED_DOCUMENT_MIME_SET.has(body.mime)) return jsonError(415, "unsupported_media_type");
+    if (!DOCUMENT_CATEGORY_SET.has(body.category)) return jsonError(400, "invalid_category");
+    if (body.size > MAX_DOCUMENT_BYTES) return jsonError(413, "file_too_large");
 
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const storageKey = `${id}/${randomUUID()}/${Date.now()}`;
-
+    const storageKey = `${id}/${randomUUID()}/${safeStorageName(body.filename)}`;
     const admin = getSupabaseAdmin();
-    const { error: upErr } = await admin.storage
-      .from("patient-documents")
-      .upload(storageKey, bytes, { contentType: file.type, upsert: false });
-    if (upErr) return jsonError(500, "storage_upload_failed", upErr.message);
+    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(storageKey);
+    if (error || !data) return jsonError(500, "sign_failed", error?.message);
 
-    const { data, error: dbErr } = await admin
-      .from("patient_documents")
-      .insert({
-        patient_id: id,
-        category,
-        storage_key: storageKey,
-        original_filename: file.name,
-        mime_type: file.type,
-        file_size: file.size,
-        sha256_hash: sha256,
-        uploaded_by: session.userId,
-      })
-      .select("id")
-      .single();
-    if (dbErr) return jsonError(500, "db_error", dbErr.message);
-
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "document_upload",
-      entityType: "patient_documents",
-      entityId: data?.id ?? null,
-      patientId: id,
-      metadata: { category, sha256, size: file.size, mime: file.type },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
-
-    return jsonOk({ id: data?.id }, { status: 201 });
+    return jsonOk({ token: data.token, path: data.path, storageKey, maxBytes: MAX_DOCUMENT_BYTES });
   } catch (err) {
     return handleRouteError(err);
   }

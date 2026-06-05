@@ -45,3 +45,28 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # `file-type` is pinned to an exact v22 (it has the DoS fixes the older lines
+  # lack) but declares node>=22, while prod/CI run Node 20. It uses no Node-22
+  # APIs, so the combo works — but this job proves it on Node 20 rather than
+  # assuming it, by exercising the magic-byte sniff path. See the follow-up
+  # ticket to align prod to Node 22 and retire this guard.
+  mime-sniff-node20:
+    name: MIME sniff (Node 20 parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify document MIME sniffing on Node 20
+        run: npm run test -- src/lib/documents
