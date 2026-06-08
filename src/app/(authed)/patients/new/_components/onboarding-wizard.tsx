@@ -308,7 +308,7 @@ export function OnboardingWizard(props: {
         {step === 0 && (
           <>
             <h2 className="section-title">A — Patient details</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Hospital" required>
                 <select
                   className="input"
@@ -433,7 +433,7 @@ export function OnboardingWizard(props: {
               <input type="checkbox" checked={B.same_as_patient} disabled={A.is_minor} onChange={(e) => applySameAsPatient(e.target.checked)} />
               Same as patient
             </label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="First names" required>
                 <input className="input" value={B.first_names} onChange={(e) => setDraft({ ...draft, section_b: { ...B, first_names: e.target.value } })} />
               </Field>
@@ -503,7 +503,7 @@ export function OnboardingWizard(props: {
                   <input type="checkbox" checked={C.same_as_responsible} onChange={(e) => applySameAsResponsible(e.target.checked)} />
                   Main member is the account-responsible party
                 </label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Field label="Main member full name" required>
                     <input className="input" value={C.main_member_name} onChange={(e) => setDraft({ ...draft, section_c: { ...C, main_member_name: e.target.value } })} />
                   </Field>
@@ -528,7 +528,7 @@ export function OnboardingWizard(props: {
         {step === 3 && (
           <>
             <h2 className="section-title">D — Nearest family / friend</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Name" required><input className="input" value={D.name} onChange={(e) => setDraft({ ...draft, section_d: { ...D, name: e.target.value } })} /></Field>
               <Field label="Relationship" required><input className="input" value={D.relationship} onChange={(e) => setDraft({ ...draft, section_d: { ...D, relationship: e.target.value } })} /></Field>
               <Field label="Tel / Cell" required><input className="input" value={D.phone} onChange={(e) => setDraft({ ...draft, section_d: { ...D, phone: e.target.value } })} /></Field>
@@ -541,7 +541,7 @@ export function OnboardingWizard(props: {
         {step === 4 && (
           <>
             <h2 className="section-title">E — Referred by</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Type" required>
                 <select className="input" value={E.referrer_type} onChange={(e) => setDraft({ ...draft, section_e: { ...E, referrer_type: e.target.value as Draft["section_e"]["referrer_type"] } })}>
                   <option value="gp">GP</option>
@@ -568,7 +568,7 @@ export function OnboardingWizard(props: {
             <p className="text-xs text-text-secondary">Add one row per dependant. Zero dependants is fine.</p>
             <div className="space-y-3">
               {draft.dependants.map((dep, idx) => (
-                <div key={idx} className="grid grid-cols-6 gap-2 items-end">
+                <div key={idx} className="grid grid-cols-1 gap-2 rounded-lg border border-border-subtle p-3 sm:grid-cols-2 sm:items-end lg:grid-cols-6 lg:border-0 lg:p-0">
                   <Field label="Name">
                     <input className="input" value={dep.name} onChange={(e) => {
                       const next = [...draft.dependants];
@@ -608,7 +608,7 @@ export function OnboardingWizard(props: {
                       setDraft({ ...draft, dependants: next });
                     }} />
                   </Field>
-                  <button className="btn-secondary" onClick={() => setDraft({ ...draft, dependants: draft.dependants.filter((_, i) => i !== idx) })}>Remove</button>
+                  <button className="btn-secondary sm:col-span-2 lg:col-span-1" onClick={() => setDraft({ ...draft, dependants: draft.dependants.filter((_, i) => i !== idx) })}>Remove</button>
                 </div>
               ))}
               <button className="btn-secondary" onClick={() => setDraft({ ...draft, dependants: [...draft.dependants, { name: "", sex: "f", date_of_birth: "", dependant_code: "", allergies: "" }] })}>
@@ -619,52 +619,54 @@ export function OnboardingWizard(props: {
         )}
 
         {step === 6 && (
-          <div className="py-[28px] px-6">
-            <div className="mb-[22px]">
+          <>
+            <div>
               <h2 className="section-title">G — Consent and declaration</h2>
               <p className="text-sm text-text-secondary mt-1">
                 Please review each statement, then capture signature and attestation to continue.
               </p>
             </div>
 
-            {CONSENT_CARDS.map((card) => (
-              <section key={card.badge} className="w-full rounded-[10px] px-[18px] py-4 mb-[10px] bg-bg-primary border border-border-subtle">
+            <div className="space-y-3">
+              {CONSENT_CARDS.map((card) => (
+                <section key={card.badge} className="rounded-lg border border-border-subtle bg-bg-primary p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
+                      {card.badge}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold mb-1">{card.title}</h3>
+                      <p className="text-sm text-text-secondary leading-7">{card.body}</p>
+                    </div>
+                  </div>
+                </section>
+              ))}
+
+              <section className="rounded-lg border border-border-subtle bg-bg-primary p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
-                    {card.badge}
+                    E
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-1">{card.title}</h3>
-                    <p className="text-sm text-text-secondary leading-7">{card.body}</p>
+                  <div className="flex-1 space-y-3">
+                    <h3 className="text-lg font-semibold">Declaration Confirmation</h3>
+                    <div className="text-sm whitespace-pre-wrap text-text-secondary leading-7">
+                      {props.consentBody || "(No consent text configured. Admin must populate practice_settings.active_consent_body before onboarding.)"}
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field label="Signature (typed full name)" required>
+                        <input className="input" value={draft.consent.signature_value} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, signature_value: e.target.value } })} />
+                      </Field>
+                    </div>
+                    <label className="flex items-start gap-2 text-sm">
+                      <input type="checkbox" checked={draft.consent.patient_present_attestation} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, patient_present_attestation: e.target.checked } })} />
+                      <span>I attest the patient was physically present and consented to the above.</span>
+                    </label>
                   </div>
                 </div>
               </section>
-            ))}
+            </div>
 
-            <section className="w-full rounded-[10px] px-[18px] py-4 mb-[10px] bg-bg-primary border border-border-subtle">
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
-                  E
-                </div>
-                <div className="flex-1 space-y-3">
-                  <h3 className="text-lg font-semibold">Declaration Confirmation</h3>
-                  <div className="text-sm whitespace-pre-wrap text-text-secondary leading-7">
-                    {props.consentBody || "(No consent text configured. Admin must populate practice_settings.active_consent_body before onboarding.)"}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Signature (typed full name)" required>
-                      <input className="input" value={draft.consent.signature_value} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, signature_value: e.target.value } })} />
-                    </Field>
-                  </div>
-                  <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" checked={draft.consent.patient_present_attestation} onChange={(e) => setDraft({ ...draft, consent: { ...draft.consent, patient_present_attestation: e.target.checked } })} />
-                    <span>I attest the patient was physically present and consented to the above.</span>
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            <div className="mt-[22px] pt-[18px] border-t border-white/5 flex items-center gap-3">
+            <div className="flex items-center gap-3 border-t border-border-subtle pt-4">
               <button className="btn-secondary" onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
               <div className="flex-1">
                 {error ? <p className="text-state-danger text-sm">{error}</p> : null}
@@ -678,7 +680,7 @@ export function OnboardingWizard(props: {
                 {busy ? "Submitting…" : "Submit and generate file number"}
               </button>
             </div>
-          </div>
+          </>
         )}
 
         {step < STEPS.length - 1 && (
@@ -700,7 +702,7 @@ function Field(props: {
   children: React.ReactNode;
 }) {
   return (
-    <div className={props.full ? "col-span-2" : ""}>
+    <div className={props.full ? "md:col-span-2" : ""}>
       <label className="label">
         {props.label}
         {props.required ? <span className="text-state-danger"> *</span> : null}
