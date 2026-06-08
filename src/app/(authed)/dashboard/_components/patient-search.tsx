@@ -164,7 +164,7 @@ export function PatientSearch() {
         <div className="flex items-center justify-between pt-2">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn-secondary"
             disabled={page === 1 || loading}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
@@ -173,7 +173,7 @@ export function PatientSearch() {
           <div className="text-xs text-text-secondary">Page {page}</div>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn-secondary"
             disabled={!hasMore || loading}
             onClick={() => setPage((p) => p + 1)}
           >
