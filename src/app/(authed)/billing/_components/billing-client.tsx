@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BILLING_HOSPITALS, HOSPITAL_FILE_PREFIX, billingFilename, monthLabel } from "@/lib/billing/format";
+import { BILLING_HOSPITALS, CASH_PAYER_LABEL, HOSPITAL_FILE_PREFIX, billingFilename, monthLabel } from "@/lib/billing/format";
+import type { BillingPayerType } from "@/lib/billing/rows";
 
 type SearchResult = {
   id: string;
@@ -10,6 +11,7 @@ type SearchResult = {
   first_names: string;
   surname: string;
   id_number: string;
+  payer_type?: BillingPayerType | null;
 };
 
 type BatchItem = {
@@ -19,6 +21,7 @@ type BatchItem = {
   patient_name: string | null;
   id_number: string | null;
   medical_aid_number: string | null;
+  payer_type: BillingPayerType | null;
   outgoing_date: string | null;
   returned_date: string | null;
   status: "pending" | "exported" | "returned";
@@ -331,7 +334,7 @@ export function BillingClient() {
                     <td className="py-2 pr-3 font-medium">{item.patient_name}</td>
                     <td className="py-2 pr-3">{item.file_number ?? "—"}</td>
                     <td className="py-2 pr-3">{item.id_number ?? "—"}</td>
-                    <td className="py-2 pr-3">{item.medical_aid_number ?? "—"}</td>
+                    <td className="py-2 pr-3"><MedicalAidCell item={item} /></td>
                     <td className="py-2 pr-3">
                       <input
                         type="date"
@@ -424,7 +427,10 @@ export function BillingClient() {
                     aria-label={`Select ${r.surname}, ${r.first_names}`}
                   />
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{r.surname}, {r.first_names}</p>
+                    <p className="truncate font-medium">
+                      {r.surname}, {r.first_names}
+                      {r.payer_type === "private" ? <CashBadge className="ml-2 align-middle" /> : null}
+                    </p>
                     <p className="truncate text-xs text-text-secondary">
                       {r.file_number} · ID {r.id_number || "—"}
                     </p>
@@ -462,4 +468,36 @@ export function BillingClient() {
       </section>
     </div>
   );
+}
+
+function CashBadge({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block rounded bg-accent-teal/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-accent-teal ${className}`}
+      title="Private payer — billed directly, no medical aid."
+    >
+      {CASH_PAYER_LABEL}
+    </span>
+  );
+}
+
+// Mirrors the export semantics in lib/billing/rows.ts (medicalAidCell): payer
+// type is authoritative, so a private payer shows CASH even if a stale
+// membership number was snapshotted. A medical-aid patient with no number is
+// flagged so staff fix the record BEFORE the file goes out; legacy rows with
+// an unknown payer keep the old "number or —" rendering.
+function MedicalAidCell({ item }: { item: BatchItem }) {
+  if (item.payer_type === "private") return <CashBadge />;
+  if (item.medical_aid_number) return <>{item.medical_aid_number}</>;
+  if (item.payer_type === "medical_aid") {
+    return (
+      <span
+        className="inline-block rounded bg-state-warning/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-state-warning"
+        title="No membership number captured. Fix it on the patient record, then re-add the patient to this batch to refresh the row. The export will not be blocked."
+      >
+        Missing
+      </span>
+    );
+  }
+  return <>—</>;
 }

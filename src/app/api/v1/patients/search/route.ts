@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from("active_patients")
-      .select("id, file_number, title, first_names, surname, id_number, phone, status, updated_at", { count: "exact" });
+      .select("id, file_number, title, first_names, surname, id_number, phone, payer_type, status, updated_at", { count: "exact" });
 
     if (q.length >= 3) query = query.or(conditions.join(","));
     if (prefix) query = query.ilike("file_number", `${prefix}-%`);

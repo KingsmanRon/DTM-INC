@@ -83,7 +83,9 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
       email: form.email || null,
       phone: form.phone,
       address: form.address,
-      payer_type: form.payer_type,
+      // Omit rather than send "" — the server validates against the payer_type
+      // enum and an empty string would fail the whole save.
+      payer_type: form.payer_type || undefined,
       responsible: current.responsible ? {
         first_names: form.responsible_first_names,
         surname: form.responsible_surname,
@@ -168,7 +170,15 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
             <SectionHeading title="Hospital information" />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Hospital" value={form.hospital} onChange={(v) => setForm((f) => ({ ...f, hospital: v }))} />
-              <Field label="Payer type" value={form.payer_type} onChange={(v) => setForm((f) => ({ ...f, payer_type: v }))} />
+              <SelectField
+                label="Payer type"
+                value={form.payer_type}
+                onChange={(v) => setForm((f) => ({ ...f, payer_type: v }))}
+                options={[
+                  { value: "medical_aid", label: "Medical aid" },
+                  { value: "private", label: "Private (cash)" },
+                ]}
+              />
             </div>
             {data.responsible ? (
               <>
@@ -229,7 +239,7 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
             <SectionHeading title="Hospital information" />
             <InfoGrid>
               <KV k="Hospital" v={data.patient.hospital} />
-              <KV k="Payer type" v={formatTitleCaseValue(data.patient.payer_type)} />
+              <KV k="Payer type" v={formatPayerType(data.patient.payer_type)} />
             </InfoGrid>
           </div>
         )}
@@ -315,15 +325,44 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-text-secondary">{label}</span>
+      <select
+        className="input bg-white/[0.02] transition-colors focus:bg-white/[0.04]"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function formatReferralType(v: string | null | undefined): string | null {
   if (!v) return null;
   if (v === "gp") return "GP";
   return v.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function formatTitleCaseValue(v: string | null | undefined): string | null {
+function formatPayerType(v: string | null | undefined): string | null {
   if (!v) return null;
-  return v.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  if (v === "private") return "Private (cash)";
+  if (v === "medical_aid") return "Medical aid";
+  return v;
 }
 
 function Block({ title, children }: { title?: string; children: React.ReactNode }) {
