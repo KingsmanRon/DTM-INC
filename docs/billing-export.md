@@ -32,6 +32,33 @@ Recon showed otherwise, and the owner confirmed the resulting decisions:
    Dates are written `DD MMMM YYYY` (e.g. `03 JUNE 2026`); identifiers are
    written as inline strings so Excel cannot mangle SA IDs / medical-aid numbers.
 
+## Cash (private) payers
+
+`patients.payer_type` (`medical_aid` | `private`, set by the onboarding
+wizard's "Private payer (no medical aid)" checkbox) is snapshotted onto each
+staged row as `billing_export_items.payer_type` (migration 0041), so the payer
+signal survives into the handoff. The Medical Aid Number column then has
+exactly three states:
+
+| Cell | Meaning |
+|---|---|
+| `CASH` | Private payer — bill the patient directly. Authoritative even if a stale membership number is still on the medical-aid record. |
+| a number | Medical-aid patient — claim against the scheme. |
+| *(blank)* | Medical-aid patient whose membership number was never captured — a data gap to fix on the patient record. |
+
+The label is `CASH` (not `PRIVATE`) because every hospital in the batch list is
+a "… Private Hospital"; on a billing sheet that word is ambiguous. The batch
+screen mirrors the same semantics: a CASH badge for private payers and an amber
+**Missing** badge for medical-aid rows with no number, so staff can fix the
+patient record and re-add the file (the upsert refreshes the snapshot) before
+the export goes out. A missing number warns but never blocks generation — one
+incomplete record must not hold up a hospital's monthly batch. Patient records
+can be reclassified on the demographics tab (Payer type dropdown); rows staged
+before 0041 were backfilled from the live patient record, and a NULL payer
+(impossible after backfill, kept for deploy-window safety) falls back to the
+old number-or-blank rendering. The disclosure audit row also records
+`cash_row_count` per export.
+
 ## Constraint compliance (non-negotiables)
 
 - **No triggers.** `updated_at` is set explicitly in the write path; audit rows
@@ -49,8 +76,9 @@ Recon showed otherwise, and the owner confirmed the resulting decisions:
 ## Files
 
 - Migrations: `supabase/migrations/0035_billing_export_audit_actions.sql`,
-  `0036_billing_export_items.sql`; verification `supabase/verify-billing-rls.sql`.
-- API: `src/app/api/v1/billing/{candidates,items,items/[id],export}/route.ts`.
+  `0036_billing_export_items.sql`, `0041_billing_export_payer_type.sql`;
+  verification `supabase/verify-billing-rls.sql`.
+- API: `src/app/api/v1/billing/{batch,items,items/[id],export}/route.ts`.
 - UI: `src/app/(authed)/billing/page.tsx` + `_components/billing-client.tsx`.
 - Lib: `src/lib/billing/{format,rows,xlsx}.ts`, `src/lib/validation/billing.ts`.
 - Tests: `src/lib/billing/*.test.ts` (xlsx, rows, format, migration guards).

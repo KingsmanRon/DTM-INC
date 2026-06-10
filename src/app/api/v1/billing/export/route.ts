@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const supabase = await getSupabaseServer();
     const { data: batch, error } = await supabase
       .from("billing_export_items")
-      .select("id, patient_id, file_number, patient_name, id_number, medical_aid_number, outgoing_date, returned_date")
+      .select("id, patient_id, file_number, patient_name, id_number, medical_aid_number, payer_type, outgoing_date, returned_date")
       .eq("hospital", payload.hospital)
       .eq("export_month", exportMonth)
       .order("patient_name", { ascending: true });
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       patient_name: r.patient_name,
       id_number: r.id_number,
       medical_aid_number: r.medical_aid_number,
+      payer_type: r.payer_type,
       outgoing_date: outgoingOverride ?? r.outgoing_date,
       returned_date: r.returned_date,
     }));
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
         export_month: exportMonth,
         recipient: RECIPIENT,
         row_count: rows.length,
+        cash_row_count: rows.filter((r) => r.payer_type === "private").length,
         outgoing_date: outgoingOverride,
         sha256,
         bytes: xlsx.length,

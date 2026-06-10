@@ -103,6 +103,14 @@ export function billingFilename(hospital: string, monthInputOrFirstDay: string):
   return `billing-export-${hospitalSlug(hospital)}-${ym}.xlsx`;
 }
 
+// What the Medical Aid Number column carries for a private (cash) payer, in
+// both the batch screen and the exported spreadsheet. "CASH" rather than
+// "PRIVATE" because every hospital in BILLING_HOSPITALS is a "... Private
+// Hospital" — on a billing sheet that word is ambiguous, while CASH reads one
+// way only: bill the patient directly. A blank cell therefore keeps a single
+// meaning: a medical-aid patient whose membership number is genuinely missing.
+export const CASH_PAYER_LABEL = "CASH";
+
 // Column headers in the spreadsheet, in order. ID/Passport and Medical Aid
 // Number are first-class columns — the whole point is that they are populated
 // from the patient record, not left blank (Constraints 3.2).

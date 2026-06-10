@@ -15,6 +15,10 @@ const items = readFileSync(
   resolve(root, "supabase/migrations/0036_billing_export_items.sql"),
   "utf8",
 );
+const payerType = readFileSync(
+  resolve(root, "supabase/migrations/0041_billing_export_payer_type.sql"),
+  "utf8",
+);
 
 // Assert against the executable DDL, not the explanatory comments. The header
 // comment legitimately mentions "no service_role", "clinical_notes RLS is
@@ -23,6 +27,7 @@ function stripSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--.*$/gm, " ");
 }
 const ddl = stripSqlComments(items);
+const payerDdl = stripSqlComments(payerType);
 
 describe("0035 audit-action enum additions", () => {
   it("adds the three billing audit actions via ADD VALUE IF NOT EXISTS (no trigger)", () => {
@@ -68,6 +73,57 @@ describe("0036 billing_export_items migration honours the hard constraints", () 
   it("grants only the authenticated role (RLS does the gating)", () => {
     expect(ddl).toMatch(
       /grant select, insert, update, delete on public\.billing_export_items to authenticated/i,
+    );
+  });
+});
+
+describe("0041 billing payer_type migration honours the same hard constraints", () => {
+  it("does NOT add any trigger (1.1)", () => {
+    expect(payerDdl).not.toMatch(/create\s+trigger/i);
+  });
+
+  it("does NOT add or widen any service_role grant (1.5)", () => {
+    expect(payerDdl).not.toMatch(/service_role/i);
+  });
+
+  it("never references clinical-note content (1.4 isolation)", () => {
+    expect(payerDdl).not.toMatch(/encrypted_body|encrypted_ink|clinical_notes/i);
+  });
+
+  it("adds payer_type as a NULLABLE snapshot column (deploy-window safety)", () => {
+    expect(payerDdl).toMatch(
+      /add column if not exists payer_type public\.payer_type\s*;/i,
+    );
+    expect(payerDdl).not.toMatch(/payer_type[\s\S]{0,40}not null/i);
+  });
+
+  it("backfills existing staged rows from the patient record", () => {
+    expect(payerDdl).toMatch(
+      /update public\.billing_export_items[\s\S]*?set payer_type = p\.payer_type[\s\S]*?where p\.id = bei\.patient_id/i,
+    );
+  });
+
+  it("snapshots p.payer_type in the staging INSERT and refreshes it on conflict (4)", () => {
+    expect(payerDdl).toMatch(/medical_aid_number, payer_type, status/i);
+    expect(payerDdl).toMatch(/p\.payer_type/);
+    expect(payerDdl).toMatch(/on conflict \(patient_id, hospital, export_month\) do update/i);
+    expect(payerDdl).toMatch(/payer_type\s*=\s*excluded\.payer_type/i);
+  });
+
+  it("keeps the RPC's security posture: role re-check, pinned search_path, explicit updated_at", () => {
+    expect(payerDdl).toMatch(/security definer/i);
+    expect(payerDdl).toMatch(/set search_path = public, pg_temp/i);
+    expect(payerDdl).toMatch(/current_app_role/);
+    expect(payerDdl).toMatch(/not in \('doctor', 'staff'\)/i);
+    expect(payerDdl).toMatch(/updated_at\s*=\s*now\(\)/i);
+  });
+
+  it("re-asserts the 0036 grant posture on the function (authenticated only)", () => {
+    expect(payerDdl).toMatch(
+      /revoke all on function public\.stage_billing_export_items\(uuid, text, date, uuid\[\]\) from public/i,
+    );
+    expect(payerDdl).toMatch(
+      /grant execute on function public\.stage_billing_export_items\(uuid, text, date, uuid\[\]\) to authenticated/i,
     );
   });
 });

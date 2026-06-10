@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { buildBillingRows, type BillingItem } from "./rows";
-import { BILLING_COLUMNS } from "./format";
+import { buildBillingRows, medicalAidCell, type BillingItem } from "./rows";
+import { BILLING_COLUMNS, CASH_PAYER_LABEL } from "./format";
 
 const sample: BillingItem = {
   file_number: "NKA-2026-000123",
   patient_name: "MBUYISWA J NHLAPO",
   id_number: "8001015009087",
   medical_aid_number: "MA-998877",
+  payer_type: "medical_aid",
   outgoing_date: "2026-06-03",
   returned_date: null,
 };
@@ -53,5 +54,36 @@ describe("buildBillingRows", () => {
     expect(row[0]).toBe("");
     expect(row[2]).toBe("");
     expect(row[3]).toBe("");
+  });
+});
+
+describe("cash (private payer) semantics in the Medical Aid Number column", () => {
+  it("writes CASH for a private payer with no medical aid captured", () => {
+    const row = firstDataRow({ ...sample, payer_type: "private", medical_aid_number: null });
+    expect(row[3]).toBe(CASH_PAYER_LABEL);
+  });
+
+  it("payer type is authoritative: CASH even over a stale snapshotted number", () => {
+    // Patient had medical aid, dropped it, was flipped to private; the old
+    // membership number may still be on the medical-aid record. The billing
+    // company must not claim against a dead scheme.
+    const row = firstDataRow({ ...sample, payer_type: "private", medical_aid_number: "MA-998877" });
+    expect(row[3]).toBe(CASH_PAYER_LABEL);
+  });
+
+  it("keeps blank reserved for a medical-aid patient with a missing number", () => {
+    const row = firstDataRow({ ...sample, payer_type: "medical_aid", medical_aid_number: null });
+    expect(row[3]).toBe("");
+  });
+
+  it("legacy rows (payer unknown, staged pre-0041) keep the old number-or-blank rendering", () => {
+    expect(medicalAidCell({ payer_type: null, medical_aid_number: "MA-998877" })).toBe("MA-998877");
+    expect(medicalAidCell({ payer_type: null, medical_aid_number: null })).toBe("");
+  });
+
+  it("never lets CASH collide with a real membership number rendering", () => {
+    // The label is a fixed sentinel, not derived from patient data.
+    expect(CASH_PAYER_LABEL).toBe("CASH");
+    expect(medicalAidCell({ payer_type: "medical_aid", medical_aid_number: "CASH-123" })).toBe("CASH-123");
   });
 });

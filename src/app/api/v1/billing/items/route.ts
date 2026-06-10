@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const { data: batch, error: batchErr } = await supabase
       .from("billing_export_items")
       .select(
-        "id, patient_id, file_number, patient_name, id_number, id_type, medical_aid_number, outgoing_date, returned_date, status, exported_at",
+        "id, patient_id, file_number, patient_name, id_number, id_type, medical_aid_number, payer_type, outgoing_date, returned_date, status, exported_at",
       )
       .eq("hospital", payload.hospital)
       .eq("export_month", exportMonth)
