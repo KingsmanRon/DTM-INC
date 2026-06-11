@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { Branding } from "@/lib/branding";
 
 // Served at /manifest.webmanifest by Next 15 App Router.
 // Replaces the previous static public/manifest.webmanifest.
@@ -16,9 +17,9 @@ import type { MetadataRoute } from "next";
 //     PWA task brief, Phase 3.6.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "DTM Inc. — Patient Records",
-    short_name: "DTM Inc.",
-    description: "Dr. Thomas Mtshali Inc. — Patient onboarding and records. Internal use only.",
+    name: Branding.appTitle,
+    short_name: Branding.appName,
+    description: Branding.appDescription,
     start_url: "/",
     scope: "/",
     display: "standalone",

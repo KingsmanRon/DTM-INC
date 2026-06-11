@@ -1,13 +1,16 @@
 "use client";
 
-import { getSupabaseBrowser } from "@/lib/supabase/client";
-
 export function LogoutButton() {
   async function onClick() {
-    const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
-    // Full-page navigation guarantees the cleared cookies propagate to
-    // the next server request — router.push would race the cookie clear.
+    // Server-side sign-out so the logout lands in the audit log (review P0#3).
+    // The route clears the auth cookies on its response; the full-page
+    // navigation guarantees the cleared cookies propagate to the next request
+    // — router.push would race the cookie clear.
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
+    } catch {
+      /* even if the request fails, leave the page — middleware will bounce */
+    }
     window.location.assign("/login");
   }
   return (

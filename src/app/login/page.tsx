@@ -4,23 +4,18 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth/redirect";
-import {
-  APP_PROFILE_QUERY_DESCRIPTION,
-  APP_PROFILE_SELECT,
-  PROFILE_API_UNAVAILABLE_ERROR_MESSAGE,
-  getProfileFailureReason,
-  profileFailureMessage,
-  profileFromQueryRow,
-  sessionFromProfile,
-  type AppProfileQueryRow,
-} from "@/lib/auth/profile";
+import { Branding } from "@/lib/branding";
 
 // Next 15 static-prerenders this route by default. useSearchParams() is a
 // client-only hook that has no value at prerender time, so the caller must
 // sit inside a <Suspense> boundary. The outer page is the suspense host;
 // LoginForm is the inner component that actually reads the `next` param.
+//
+// Sign-in goes through POST /api/v1/auth/login — NOT the browser Supabase
+// client — so every success/failure/lockout lands in the hash-chained audit
+// log and last_login_at is maintained (review P0#3). The route sets the same
+// auth cookies the old client flow did; MFA enrol/challenge work unchanged.
 
 export default function LoginPage() {
   return (
@@ -34,11 +29,12 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeRedirectPath(params.get("next"), "/dashboard");
-  const debugAuth = params.get("debug_auth") === "1";
   // The /auth/callback route redirects here with ?error=<message> when PKCE
-  // code exchange fails (bad/expired link, replay, missing code). Surface it
-  // so the user knows why they ended up back on /login.
+  // code exchange fails (bad/expired link, replay, missing code). The idle
+  // auto-logout lands here with ?reason=idle. Surface both so the user knows
+  // why they ended up back on /login.
   const initialError = params.get("error");
+  const idleNotice = params.get("reason") === "idle";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,114 +46,21 @@ function LoginForm() {
     setError(null);
 
     try {
-      const supabase = getSupabaseBrowser();
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      const hasSession = Boolean(data.session);
-      const hasUser = Boolean(data.user);
-      const safeNextRoute = next;
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email, password }),
+      });
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
 
-      if (debugAuth) {
-        console.info("[auth-login]", {
-          tokenCallSucceeded: !error,
-          hasSession,
-          hasUser,
-          userId: data.user?.id ?? null,
-          nextRoute: safeNextRoute,
-          errorMessage: error?.message ?? null,
-        });
-      }
-
-      if (error || !hasSession || !hasUser) {
+      if (!res.ok) {
         setBusy(false);
-        setError(error?.message ?? "Sign-in succeeded, but no active session was established.");
+        setError(body?.message ?? "Sign-in failed. Please try again.");
         return;
       }
 
-      // Validate the staff profile before redirecting. This uses the
-      // authenticated user's Supabase client under RLS, filters by the Auth
-      // user id (not email), and expects public.app_users.id = auth.users.id.
-      const profileQueryTarget = {
-        ...APP_PROFILE_QUERY_DESCRIPTION,
-        authenticatedUserId: data.user.id,
-        authenticatedEmail: data.user.email ?? email,
-        select: APP_PROFILE_SELECT,
-      };
-      const profileRequestPath =
-        `/rest/v1/app_users?select=${encodeURIComponent(APP_PROFILE_SELECT)}&id=eq.${encodeURIComponent(data.user.id)}`;
-
-      console.info("[auth-login-profile] profile lookup started", {
-        request: profileRequestPath,
-        target: profileQueryTarget,
-      });
-
-      const profileTimeoutMs = 10000;
-      let profile: ReturnType<typeof profileFromQueryRow> = null;
-      let profileError: { code?: string; message?: string; details?: string; hint?: string } | null = null;
-      let profileTimedOut = false;
-
-      let profileTimeoutId: number | null = null;
-      try {
-        const profileQuery = supabase
-          .from("app_users")
-          .select(APP_PROFILE_SELECT)
-          .eq("id", data.user.id)
-          .maybeSingle();
-        const timeout = new Promise<never>((_, reject) => {
-          profileTimeoutId = window.setTimeout(
-            () => reject(new Error(`profile lookup timed out after ${profileTimeoutMs}ms`)),
-            profileTimeoutMs,
-          );
-        });
-        const { data: profileRow, error: lookupError } = await Promise.race([profileQuery, timeout]);
-
-        profileError = lookupError;
-        profile = profileFromQueryRow((profileRow as AppProfileQueryRow | null) ?? null);
-      } catch (lookupError) {
-        profileTimedOut = lookupError instanceof Error && lookupError.message.includes("timed out");
-        profileError = {
-          message: lookupError instanceof Error ? lookupError.message : String(lookupError),
-        };
-      } finally {
-        if (profileTimeoutId !== null) window.clearTimeout(profileTimeoutId);
-      }
-
-      const profileFailureReason = getProfileFailureReason(profile);
-      const profileLookupFailed = Boolean(profileError);
-
-      console.info("[auth-login-profile] profile lookup completed", {
-        request: profileRequestPath,
-        target: profileQueryTarget,
-        succeeded: !profileLookupFailed,
-        timedOut: profileTimedOut,
-        profileFound: Boolean(profile),
-        missingAppUserRow: !profileError && !profile,
-        profileStatus: profile?.status ?? null,
-        roleName: profile?.role_name ?? null,
-        failureReason: profileError ? "query_failed" : profileFailureReason,
-        supabaseError: profileError
-          ? {
-              code: profileError.code ?? null,
-              message: profileError.message ?? null,
-              details: profileError.details ?? null,
-              hint: profileError.hint ?? null,
-            }
-          : null,
-      });
-
-      if (profileError || profileFailureReason || !sessionFromProfile(profile)) {
-        await supabase.auth.signOut().catch((signOutError) => {
-          console.error("[auth-login-profile] signOut after profile failure failed", signOutError);
-        });
-        setBusy(false);
-        setError(
-          profileError
-            ? PROFILE_API_UNAVAILABLE_ERROR_MESSAGE
-            : profileFailureMessage(profileFailureReason ?? "missing"),
-        );
-        return;
-      }
-
-      router.replace(safeNextRoute);
+      router.replace(next);
       router.refresh();
     } catch (err) {
       console.error("[auth-login] unexpected sign-in failure", err);
@@ -172,6 +75,7 @@ function LoginForm() {
       password={password}
       busy={busy}
       error={error}
+      idleNotice={idleNotice}
       onEmail={setEmail}
       onPassword={setPassword}
       onSubmit={onSubmit}
@@ -187,6 +91,7 @@ function LoginShell(props: {
   password?: string;
   busy?: boolean;
   error?: string | null;
+  idleNotice?: boolean;
   onEmail?: (v: string) => void;
   onPassword?: (v: string) => void;
   onSubmit?: (e: React.FormEvent) => void;
@@ -197,6 +102,7 @@ function LoginShell(props: {
     password = "",
     busy = false,
     error = null,
+    idleNotice = false,
     onEmail = () => {},
     onPassword = () => {},
     onSubmit = (e) => e.preventDefault(),
@@ -206,9 +112,15 @@ function LoginShell(props: {
     <main className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={onSubmit} className="card w-full max-w-md space-y-5">
         <div>
-          <h1 className="text-2xl font-semibold">DTM Inc.</h1>
+          <h1 className="text-2xl font-semibold">{Branding.appName}</h1>
           <p className="text-text-secondary text-sm">Sign in to continue. Staff access only.</p>
         </div>
+
+        {idleNotice ? (
+          <p className="text-text-secondary text-sm">
+            You were signed out after a period of inactivity. Please sign in again.
+          </p>
+        ) : null}
 
         <div>
           <label className="label" htmlFor="email">Email</label>

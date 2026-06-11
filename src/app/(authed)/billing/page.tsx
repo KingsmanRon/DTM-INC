@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { AuthError, requireRole } from "@/lib/auth/session";
+import { getSupabaseServer } from "@/lib/supabase/server";
+import { getActiveHospitals } from "@/lib/hospitals";
 import { BillingClient } from "./_components/billing-client";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,11 @@ export default async function BillingPage() {
     throw err;
   }
 
+  // Hospitals are data (0044): fetched under the caller's RLS context and
+  // passed down, so the dropdown matches whatever this practice configured.
+  const supabase = await getSupabaseServer();
+  const hospitals = await getActiveHospitals(supabase);
+
   return (
     <div className="space-y-6">
       <section>
@@ -31,7 +38,7 @@ export default async function BillingPage() {
       {/* The selectors read URL search params, so the interactive client must sit
           inside a Suspense boundary or the production build fails (Next 15). */}
       <Suspense fallback={<p className="text-text-secondary text-sm">Loading billing export…</p>}>
-        <BillingClient />
+        <BillingClient hospitals={hospitals} />
       </Suspense>
     </div>
   );

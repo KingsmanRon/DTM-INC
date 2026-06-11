@@ -45,6 +45,10 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [draftName, setDraftName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch(`/api/v1/patients/${patientId}/documents`, { credentials: "same-origin" });
@@ -109,8 +113,34 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
 
   // Edit the base name only — the extension is shown locked beside the field
   // and re-applied server-side, so it can't be changed or duplicated.
-  function startRename(d: Doc) { setEditingId(d.id); setDraftName(splitFileName(d.original_filename).base); setRenameError(null); }
+  function startRename(d: Doc) { setEditingId(d.id); setDraftName(splitFileName(d.original_filename).base); setRenameError(null); setRemovingId(null); }
   function cancelRename() { setEditingId(null); setDraftName(""); setRenameError(null); }
+
+  // Remove = SOFT archive (mis-upload correction). The server keeps the bytes
+  // and the row for the audit trail; the document just leaves this list.
+  function startRemove(d: Doc) { setRemovingId(d.id); setRemoveReason(""); setRemoveError(null); setEditingId(null); }
+  function cancelRemove() { setRemovingId(null); setRemoveReason(""); setRemoveError(null); }
+
+  async function onRemove(docId: string) {
+    setRemoving(true); setRemoveError(null);
+    try {
+      const res = await fetch(`/api/v1/patients/${patientId}/documents/${docId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(removeReason.trim() ? { reason: removeReason.trim() } : {}),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setRemoveError(j.message ?? "Couldn't remove — please try again.");
+        return;
+      }
+      setRemovingId(null); setRemoveReason("");
+      await refresh();
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   async function onRename(docId: string) {
     const name = draftName.trim();
@@ -176,6 +206,30 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                     </form>
                     {renameError ? <p className="text-state-danger text-xs mt-1">{renameError}</p> : null}
                   </div>
+                ) : removingId === d.id ? (
+                  <div className="flex-1 space-y-2">
+                    <p className="text-sm">
+                      Remove <span className="font-medium">{d.original_filename}</span> from this patient&apos;s file?
+                    </p>
+                    <p className="text-xs text-text-secondary">
+                      The document leaves this list but is preserved for the audit record. Use this to
+                      correct a wrong upload.
+                    </p>
+                    <input
+                      className="input w-full"
+                      placeholder="Reason (optional) — e.g. uploaded to the wrong patient"
+                      value={removeReason}
+                      disabled={removing}
+                      onChange={(e) => setRemoveReason(e.target.value)}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button type="button" className="btn-primary" disabled={removing} onClick={() => onRemove(d.id)}>
+                        {removing ? "Removing…" : "Remove document"}
+                      </button>
+                      <button type="button" className="btn-secondary" disabled={removing} onClick={cancelRemove}>Cancel</button>
+                    </div>
+                    {removeError ? <p className="text-state-danger text-xs">{removeError}</p> : null}
+                  </div>
                 ) : (
                   <>
                     <div className="min-w-0">
@@ -187,6 +241,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                     <div className="flex items-center gap-2 shrink-0">
                       <button className="btn-secondary" onClick={() => startRename(d)}>Rename</button>
                       <button className="btn-secondary" onClick={() => openDoc(d.id)}>View</button>
+                      <button className="btn-secondary text-state-danger" onClick={() => startRemove(d)}>Remove</button>
                     </div>
                   </>
                 )}

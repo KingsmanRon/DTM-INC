@@ -1,7 +1,16 @@
 import Link from "next/link";
+import { getSupabaseServer } from "@/lib/supabase/server";
+import { getActiveHospitals } from "@/lib/hospitals";
 import { PatientSearch } from "./_components/patient-search";
 
-export default function DashboardPage() {
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  // Hospitals are data (0044): fetched under the caller's RLS context so the
+  // practice filter reflects whatever this deployment configured.
+  const supabase = await getSupabaseServer();
+  const hospitals = await getActiveHospitals(supabase);
+
   return (
     <div className="space-y-6">
       <section>
@@ -9,7 +18,7 @@ export default function DashboardPage() {
         <p className="text-text-secondary text-sm mb-4">
           Search by file number, name, ID, phone, or medical aid number.
         </p>
-        <PatientSearch />
+        <PatientSearch hospitals={hospitals} />
       </section>
 
       <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

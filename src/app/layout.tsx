@@ -1,13 +1,14 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { SwRegister } from "./sw-register";
+import { Branding } from "@/lib/branding";
 import { IOSInstallBanner } from "@/components/IOSInstallBanner";
 import { AndroidInstallButton } from "@/components/AndroidInstallButton";
 
 export const metadata: Metadata = {
-  title: "DTM Inc. — Patient Records",
-  description: "Dr. Thomas Mtshali Inc. — Specialist Laparoscopic and General Surgeon. Internal staff system.",
-  applicationName: "DTM Inc.",
+  title: Branding.appTitle,
+  description: Branding.appDescription,
+  applicationName: Branding.appName,
   robots: { index: false, follow: false, nocache: true },
   // manifest is auto-generated from src/app/manifest.ts and served at /manifest.webmanifest.
   icons: {
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
   // + the right title under the icon.
   appleWebApp: {
     capable: true,
-    title: "DTM Inc.",
+    title: Branding.appName,
     statusBarStyle: "black-translucent",
   },
 };

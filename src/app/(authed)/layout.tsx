@@ -4,8 +4,11 @@ import Image from "next/image";
 import { resolveSession } from "@/lib/auth/session";
 import { resolveMfa } from "@/lib/auth/mfa";
 import { getPracticeSettings } from "@/lib/practice/settings";
+import { getServerEnv } from "@/lib/env";
+import { Branding } from "@/lib/branding";
 import { LogoutButton } from "./_components/logout-button";
 import { InstallHelpLink } from "@/components/InstallHelpLink";
+import { IdleLogout } from "@/components/IdleLogout";
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const session = await resolveSession();
@@ -16,14 +19,24 @@ export default async function AuthedLayout({ children }: { children: React.React
   if (mfa.action === "enrol") redirect("/mfa/enrol");
   if (mfa.action === "challenge") redirect("/mfa/challenge");
 
+  // FR-1 idle timeout: per-role minutes from env (defaults 30/15/15).
+  const env = getServerEnv();
+  const idleMinutes =
+    session.role === "staff"
+      ? env.SESSION_IDLE_TIMEOUT_STAFF_MIN
+      : session.role === "doctor"
+        ? env.SESSION_IDLE_TIMEOUT_DOCTOR_MIN
+        : env.SESSION_IDLE_TIMEOUT_ADMIN_MIN;
+
   // Shared, cached read (see lib/practice/settings.ts) — no longer a per-render
   // /rest/v1/practice_settings call.
   const settings = await getPracticeSettings();
-  const practiceName = (settings?.practice_name as string | undefined) ?? "DTM Inc.";
-  const informationOfficerName = (settings?.information_officer_name as string | undefined) ?? "Dr. Thomas Mtshali";
+  const practiceName = (settings?.practice_name as string | undefined) ?? Branding.appName;
+  const informationOfficerName = (settings?.information_officer_name as string | undefined) ?? "the practice owner";
 
   return (
     <div className="min-h-screen flex flex-col">
+      <IdleLogout timeoutMinutes={idleMinutes} />
       <header className="border-b border-border-subtle bg-surface-elevated">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
           <div className="flex items-center justify-between gap-3">
@@ -62,6 +75,7 @@ export default async function AuthedLayout({ children }: { children: React.React
               <>
                 <Link href="/admin/users" prefetch={false} className="hover:text-accent-teal">Users</Link>
                 <Link href="/admin/audit" prefetch={false} className="hover:text-accent-teal">Audit</Link>
+                <Link href="/admin/break-glass" prefetch={false} className="hover:text-accent-teal">Break-glass</Link>
                 <Link href="/admin/settings" prefetch={false} className="hover:text-accent-teal">Settings</Link>
               </>
             ) : null}

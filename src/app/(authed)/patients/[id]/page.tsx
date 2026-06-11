@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getPatientBundle } from "@/lib/patients/bundle";
+import { writeAudit } from "@/lib/audit/log";
 import { PatientTabs } from "./_components/patient-tabs";
 import { PrintCurrentFileButton } from "@/components/PrintCurrentFileButton";
 import { canUseHandwrittenNotes, getHandwrittenNotesFeatures } from "@/lib/clinical-notes/features";
@@ -19,6 +21,22 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
   const { data: bundle, error } = await getPatientBundle(supabase, id);
   if (error || !bundle) notFound();
   const { patient } = bundle;
+
+  // POPIA access logging (review #22): opening the profile IS the access to
+  // the demographics bundle — this server render fetches and displays it, so
+  // the audit row is written here, not only on the API refresh path.
+  const h = await headers();
+  await writeAudit({
+    actorUserId: session.userId,
+    actorRole: session.role,
+    action: "patient_view",
+    entityType: "patient",
+    entityId: id,
+    patientId: id,
+    metadata: { surface: "profile_page" },
+    ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    userAgent: h.get("user-agent"),
+  });
 
   const isDoctor = session.role === "doctor";
   const inkEnabled = isDoctor && canUseHandwrittenNotes(session.userId);

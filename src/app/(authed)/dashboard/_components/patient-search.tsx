@@ -14,15 +14,15 @@ type Result = {
   updated_at: string;
 };
 
-const PRACTICES = [
-  { prefix: "", label: "All practices" },
-  { prefix: "NKA", label: "Nkanyezi Private Hospital" },
-  { prefix: "FOU", label: "Fountain Private Hospital" },
-  { prefix: "MED", label: "Mediclinic Vereeniging Hospital" },
-  { prefix: "MID", label: "Midvaal Private Hospital" },
-] as const;
+// Hospitals come from the server page (public.hospitals via RLS, 0044) — the
+// filter list is data, not code, so a new practice's hospitals just appear.
+export type HospitalOption = { name: string; file_prefix: string };
 
-export function PatientSearch() {
+export function PatientSearch({ hospitals }: { hospitals: HospitalOption[] }) {
+  const practices = [
+    { prefix: "", label: "All practices" },
+    ...hospitals.map((h) => ({ prefix: h.file_prefix, label: h.name })),
+  ];
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [prefix, setPrefix] = useState("");
@@ -107,7 +107,7 @@ export function PatientSearch() {
 
   function getPracticeLabel(fileNumber: string): string {
     const code = fileNumber.split("-")[0] ?? "";
-    return PRACTICES.find((p) => p.prefix === code)?.label ?? "Unknown practice";
+    return practices.find((p) => p.prefix === code)?.label ?? "Unknown practice";
   }
 
   return (
@@ -122,7 +122,7 @@ export function PatientSearch() {
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <select className="input" value={prefix} onChange={(e) => setPrefix(e.target.value)}>
-          {PRACTICES.map((p) => (
+          {practices.map((p) => (
             <option key={p.label} value={p.prefix}>{p.label}</option>
           ))}
         </select>
