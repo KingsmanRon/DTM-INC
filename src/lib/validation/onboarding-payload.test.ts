@@ -2,6 +2,7 @@
 // shared OnboardingPayload schema (written during the 2026-06-11 submit
 // incident to rule client-side validation in/out — kept because a schema
 // change that breaks a normal front-desk fill should fail CI, not reception).
+import { describe, expect, it } from "vitest";
 import { OnboardingPayload } from "./patient";
 
 const typicalAdultPayload = {
