@@ -4,6 +4,7 @@ import Link from "next/link";
 import { resolveSession } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getPatientBundle } from "@/lib/patients/bundle";
+import { getActiveHospitals } from "@/lib/hospitals";
 import { writeAudit } from "@/lib/audit/log";
 import { PatientTabs } from "./_components/patient-tabs";
 import { PrintCurrentFileButton } from "@/components/PrintCurrentFileButton";
@@ -41,6 +42,8 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
   const isDoctor = session.role === "doctor";
   const inkEnabled = isDoctor && canUseHandwrittenNotes(session.userId);
   const features = getHandwrittenNotesFeatures();
+  // For the hospital-reassignment card on the demographics tab (0053).
+  const hospitals = await getActiveHospitals(supabase);
 
   return (
     <div className="space-y-4">
@@ -74,6 +77,7 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
         handwrittenFinaliseEnabled={inkEnabled && features.finaliseEnabled}
         notesPdfEnabled={isDoctor && features.pdfEnabled}
         initialDemographics={bundle}
+        hospitals={hospitals}
       />
     </div>
   );
