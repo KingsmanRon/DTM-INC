@@ -1,0 +1,164 @@
+-- 0047_update_patient_bundle.sql — transactional demographics update.
+--
+-- WHY (review P1#10): PATCH /api/v1/patients/[id] updated up to five tables in
+-- sequence with no transaction. A failure midway persisted the patient-row
+-- change, returned a 500, and skipped the audit row — a partially-applied,
+-- unaudited edit. This RPC performs the whole bundle update atomically.
+--
+-- Posture: SECURITY INVOKER on purpose — every UPDATE here runs under the
+-- caller's RLS context, so the doctor/staff policies remain the enforcement
+-- layer (admin and anon update nothing). This mirrors void_clinical_note.
+--
+-- HOSPITAL IS IMMUTABLE HERE (policy decision): a patient's file number carries
+-- the hospital prefix it was allocated under; silently editing `hospital` broke
+-- the hospital↔prefix invariant the billing batch screen depends on. Moving a
+-- patient between hospitals is a deliberate operator action (with file-number
+-- consideration), not an inline demographics edit.
+--
+-- patient_emergency_contacts is 1:N — an UPDATE without an id used to hit every
+-- contact row for the patient. Now: an explicit id targets that row; no id is
+-- only allowed when the patient has exactly one contact.
+
+begin;
+
+create or replace function public.update_patient_bundle(
+  p_patient_id  uuid,
+  p_patient     jsonb default null,
+  p_responsible jsonb default null,
+  p_medical_aid jsonb default null,
+  p_contact     jsonb default null,
+  p_referral    jsonb default null
+)
+returns setof public.patients
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_patient public.patients%rowtype;
+  v_contact_id uuid;
+  v_contact_count int;
+  v_rows int;
+begin
+  if v_actor is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+  if p_patient_id is null then
+    raise exception 'patient_id is required' using errcode = '22023';
+  end if;
+
+  -- Lock the patient row for the duration of the bundle update. Under RLS this
+  -- also proves visibility: admin/anon find nothing here and stop.
+  select * into v_patient
+    from public.patients
+    where id = p_patient_id
+    for update;
+  if not found then
+    raise exception 'patient not found' using errcode = 'PT404';
+  end if;
+
+  if p_patient is not null then
+    if p_patient ? 'hospital'
+       and nullif(btrim(p_patient->>'hospital'), '') is distinct from v_patient.hospital then
+      raise exception 'hospital cannot be changed via demographics update'
+        using errcode = 'PT409',
+              hint = 'Hospital is fixed at onboarding; moving a patient is a deliberate operator action.';
+    end if;
+
+    update public.patients set
+      title       = coalesce(nullif(p_patient->>'title', '')::public.title_enum, title),
+      first_names = coalesce(nullif(btrim(p_patient->>'first_names'), ''), first_names),
+      surname     = coalesce(nullif(btrim(p_patient->>'surname'), ''), surname),
+      -- email is clearable: an explicit "email": null (or "") empties it.
+      email       = case when p_patient ? 'email' then nullif(btrim(coalesce(p_patient->>'email', '')), '') else email end,
+      phone       = coalesce(nullif(btrim(p_patient->>'phone'), ''), phone),
+      address     = coalesce(nullif(btrim(p_patient->>'address'), ''), address),
+      payer_type  = coalesce(nullif(p_patient->>'payer_type', '')::public.payer_type, payer_type),
+      updated_by  = v_actor
+    where id = p_patient_id;
+  end if;
+
+  if p_responsible is not null then
+    update public.patient_account_responsible set
+      first_names   = coalesce(nullif(btrim(p_responsible->>'first_names'), ''), first_names),
+      surname       = coalesce(nullif(btrim(p_responsible->>'surname'), ''), surname),
+      phone         = coalesce(nullif(btrim(p_responsible->>'phone'), ''), phone),
+      employer_name = case when p_responsible ? 'employer_name' then nullif(btrim(coalesce(p_responsible->>'employer_name', '')), '') else employer_name end,
+      occupation    = case when p_responsible ? 'occupation' then nullif(btrim(coalesce(p_responsible->>'occupation', '')), '') else occupation end,
+      updated_by    = v_actor
+    where patient_id = p_patient_id;
+    get diagnostics v_rows = row_count;
+    if v_rows = 0 then
+      raise exception 'no account-responsible record for this patient' using errcode = 'PT404';
+    end if;
+  end if;
+
+  if p_medical_aid is not null then
+    update public.patient_medical_aid set
+      main_member_name  = case when p_medical_aid ? 'main_member_name' then nullif(btrim(coalesce(p_medical_aid->>'main_member_name', '')), '') else main_member_name end,
+      medical_aid_name  = case when p_medical_aid ? 'medical_aid_name' then nullif(btrim(coalesce(p_medical_aid->>'medical_aid_name', '')), '') else medical_aid_name end,
+      membership_number = case when p_medical_aid ? 'membership_number' then nullif(btrim(coalesce(p_medical_aid->>'membership_number', '')), '') else membership_number end,
+      plan              = case when p_medical_aid ? 'plan' then nullif(btrim(coalesce(p_medical_aid->>'plan', '')), '') else plan end,
+      updated_by        = v_actor
+    where patient_id = p_patient_id;
+    get diagnostics v_rows = row_count;
+    if v_rows = 0 then
+      raise exception 'no medical-aid record for this patient' using errcode = 'PT404';
+    end if;
+  end if;
+
+  if p_contact is not null then
+    v_contact_id := nullif(p_contact->>'id', '')::uuid;
+    if v_contact_id is null then
+      select count(*) into v_contact_count
+        from public.patient_emergency_contacts
+        where patient_id = p_patient_id;
+      if v_contact_count > 1 then
+        raise exception 'contact id is required when the patient has multiple emergency contacts'
+          using errcode = '22023';
+      end if;
+    end if;
+
+    update public.patient_emergency_contacts set
+      name         = coalesce(nullif(btrim(p_contact->>'name'), ''), name),
+      relationship = coalesce(nullif(btrim(p_contact->>'relationship'), ''), relationship),
+      phone        = coalesce(nullif(btrim(p_contact->>'phone'), ''), phone),
+      updated_by   = v_actor
+    where patient_id = p_patient_id
+      and (v_contact_id is null or id = v_contact_id);
+    get diagnostics v_rows = row_count;
+    if v_rows = 0 then
+      raise exception 'no matching emergency contact for this patient' using errcode = 'PT404';
+    end if;
+  end if;
+
+  if p_referral is not null then
+    update public.patient_referrals set
+      referrer_type  = coalesce(nullif(p_referral->>'referrer_type', '')::public.referrer_type, referrer_type),
+      referrer_name  = case when p_referral ? 'referrer_name' then nullif(btrim(coalesce(p_referral->>'referrer_name', '')), '') else referrer_name end,
+      referrer_phone = case when p_referral ? 'referrer_phone' then nullif(btrim(coalesce(p_referral->>'referrer_phone', '')), '') else referrer_phone end,
+      updated_by     = v_actor
+    where patient_id = p_patient_id
+      and (nullif(p_referral->>'id', '') is null or id = (p_referral->>'id')::uuid);
+    get diagnostics v_rows = row_count;
+    if v_rows = 0 then
+      raise exception 'no matching referral for this patient' using errcode = 'PT404';
+    end if;
+  end if;
+
+  return query
+    select * from public.patients where id = p_patient_id;
+end;
+$$;
+
+revoke all on function public.update_patient_bundle(uuid, jsonb, jsonb, jsonb, jsonb, jsonb) from public;
+grant execute on function public.update_patient_bundle(uuid, jsonb, jsonb, jsonb, jsonb, jsonb) to authenticated;
+
+commit;
+
+-- POST-APPLY VERIFICATION:
+--   1. Staff edit of names/phone/medical aid persists atomically and returns the row.
+--   2. Sending "hospital" with a different value -> PT409, nothing changed.
+--   3. As admin: rpc -> PT404 (RLS hides the patient row; nothing leaks).
+--   4. Contact update without id on a 2-contact patient -> 22023.

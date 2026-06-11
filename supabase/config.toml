@@ -1,0 +1,9 @@
+# Minimal Supabase CLI config — exists so `supabase db start` + `supabase test db`
+# can run the pgTAP authz suite (supabase/tests/) locally and in CI against the
+# migrations in this repo. All unspecified settings use CLI defaults.
+project_id = "dtm-inc"
+
+[db.seed]
+# Dev seeds are NOT applied in the test database: the pgTAP suite creates its
+# own fixtures inside a rolled-back transaction.
+enabled = false
