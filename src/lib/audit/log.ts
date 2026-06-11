@@ -20,6 +20,7 @@ import type { AppRole } from "@/lib/auth/session";
 export type AuditAction =
   | "login_success" | "login_failure" | "login_lockout" | "logout"
   | "patient_view" | "patient_create" | "patient_update" | "patient_archive" | "patient_unarchive"
+  | "patient_file_reassigned"
   | "document_upload" | "document_view" | "document_download" | "document_archive" | "document_rename"
   | "note_create" | "note_read" | "note_amend" | "note_finalise" | "clinical_note_voided"
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"

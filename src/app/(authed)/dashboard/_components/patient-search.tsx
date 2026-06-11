@@ -12,6 +12,10 @@ type Result = {
   phone: string;
   hospital: string;
   updated_at: string;
+  // Set when the match was found via a RETIRED file number (hospital
+  // reassignment, 0053) — shown so reception holding the old paper folder
+  // understands why the number on screen differs.
+  former_file_number?: string | null;
 };
 
 // Hospitals come from the server page (public.hospitals via RLS, 0044) — the
@@ -149,6 +153,9 @@ export function PatientSearch({ hospitals }: { hospitals: HospitalOption[] }) {
                 </div>
                 <div className="text-right">
                   <div className="file-number text-sm">{r.file_number}</div>
+                  {r.former_file_number ? (
+                    <div className="text-xs text-state-warning">was {r.former_file_number}</div>
+                  ) : null}
                 </div>
               </Link>
             </li>

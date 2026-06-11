@@ -38,3 +38,6 @@ coverage
 # supabase local
 supabase/.branches
 supabase/.temp
+
+# Business/sales material — never ships with the product repo
+docs/business/

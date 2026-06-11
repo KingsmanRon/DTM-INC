@@ -16,7 +16,9 @@ const BASE_TABS = [
 
 type TabId = "demographics" | "documents" | "clinical";
 
-export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled, initialDemographics }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean; initialDemographics: PatientBundle }) {
+export type HospitalOption = { name: string; file_prefix: string };
+
+export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrittenFinaliseEnabled, notesPdfEnabled, initialDemographics, hospitals }: { patientId: string; role: AppRole; handwrittenNotesEnabled: boolean; handwrittenFinaliseEnabled: boolean; notesPdfEnabled: boolean; initialDemographics: PatientBundle; hospitals: HospitalOption[] }) {
   const [active, setActive] = useState<TabId>("demographics");
 
   const tabs = role === "doctor"
@@ -41,7 +43,7 @@ export function PatientTabs({ patientId, role, handwrittenNotesEnabled, handwrit
         ))}
       </nav>
 
-      {active === "demographics" && <DemographicsTab patientId={patientId} initialData={initialDemographics} />}
+      {active === "demographics" && <DemographicsTab patientId={patientId} initialData={initialDemographics} hospitals={hospitals} />}
       {active === "documents" && <DocumentsTab patientId={patientId} />}
       {active === "clinical" && role === "doctor" && <ClinicalNotesTab patientId={patientId} handwrittenNotesEnabled={handwrittenNotesEnabled} handwrittenFinaliseEnabled={handwrittenFinaliseEnabled} notesPdfEnabled={notesPdfEnabled} />}
     </div>

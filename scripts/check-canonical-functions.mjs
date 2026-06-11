@@ -27,6 +27,7 @@ const TRACKED_FUNCTIONS = [
   "stage_billing_export_items",
   "void_clinical_note",
   "update_patient_bundle",
+  "reassign_patient_hospital",
   "current_app_role",
   "prevent_finalised_clinical_note_mutation",
   "prevent_consent_record_mutation",

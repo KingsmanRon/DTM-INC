@@ -19,7 +19,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(14);
+select plan(19);
 
 -- ── Fixtures (as superuser; RLS bypassed by table ownership) ────────────────
 
@@ -230,7 +230,55 @@ select throws_ok(
   'update_patient_bundle returns not-found to admin (RLS, security invoker)'
 );
 
+-- ── 15-19: hospital/file-number reassignment (0053) ──────────────────────────
+
+select throws_ok(
+  $$ select * from public.reassign_patient_hospital(
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',
+       'admin should never be able to do this') $$,
+  '42501',
+  null,
+  'reassign_patient_hospital rejects an admin caller'
+);
+
 reset role;
+select pg_temp.impersonate('22222222-2222-2222-2222-222222222222');
+
+select like(
+  (select new_file_number from public.reassign_patient_hospital(
+     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',
+     'Onboarded under Nkanyezi in error; patient admits at Fountain')),
+  'FOU-%',
+  'reassignment issues a new file number under the correct prefix'
+);
+
+select throws_ok(
+  $$ select * from public.reassign_patient_hospital(
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',
+       'already there - this must be refused') $$,
+  'PT409',
+  null,
+  'reassigning to the SAME hospital is refused'
+);
+
+reset role;
+
+select is(
+  (select count(*)::int from public.patient_file_number_history
+    where patient_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      and old_file_number = 'NKA-2026-900001'
+      and new_hospital = 'Fountain Private Hospital'),
+  1,
+  'the retired number is recorded in patient_file_number_history'
+);
+
+select is(
+  (select count(*)::int from public.file_number_reservations
+    where prefix = 'NKA' and year = 2026 and seq = 900001
+      and consumed_at is not null),
+  1,
+  'the retired number is poison-pilled in file_number_reservations (never reissued)'
+);
 
 select * from finish();
 rollback;

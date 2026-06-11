@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { PatientBundle as PatientPayload } from "@/lib/patients/bundle";
 
+export type HospitalOption = { name: string; file_prefix: string };
+
 function formFromPayload(data: PatientPayload | null) {
   return {
     hospital: data?.patient.hospital ?? "",
@@ -33,7 +35,7 @@ function formFromPayload(data: PatientPayload | null) {
   };
 }
 
-export function DemographicsTab({ patientId, initialData }: { patientId: string; initialData: PatientPayload }) {
+export function DemographicsTab({ patientId, initialData, hospitals }: { patientId: string; initialData: PatientPayload; hospitals: HospitalOption[] }) {
   const [data, setData] = useState<PatientPayload | null>(initialData);
   const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
@@ -308,9 +310,167 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
               </ul>
             </Block>
           )}
+
+          <ReassignHospitalCard
+            patientId={patientId}
+            currentHospital={data.patient.hospital ?? ""}
+            currentFileNumber={data.patient.file_number ?? ""}
+            hospitals={hospitals}
+          />
         </>
       ) : null}
     </div>
+  );
+}
+
+// Administrative correction for a patient filed under the WRONG hospital
+// (0053): allocates a NEW file number under the correct prefix, retires the
+// old one (still searchable), and removes never-exported billing rows from the
+// wrong hospital's batch. Deliberately heavy on confirmation — the file number
+// on the physical folder changes.
+function ReassignHospitalCard({
+  patientId,
+  currentHospital,
+  currentFileNumber,
+  hospitals,
+}: {
+  patientId: string;
+  currentHospital: string;
+  currentFileNumber: string;
+  hospitals: HospitalOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [newHospital, setNewHospital] = useState("");
+  const [reason, setReason] = useState("");
+  const [confirmNumber, setConfirmNumber] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ new_file_number: string; new_hospital: string; removed_pending_billing: number } | null>(null);
+
+  const otherHospitals = hospitals.filter((h) => h.name !== currentHospital);
+  const reasonTooShort = reason.trim().length < 10;
+  const confirmed = confirmNumber.trim() === currentFileNumber;
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/patients/${patientId}/reassign-hospital`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ new_hospital: newHospital, reason: reason.trim() }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { message?: string; new_file_number?: string; new_hospital?: string; removed_pending_billing?: number }
+        | null;
+      if (!res.ok) {
+        setError(body?.message ?? "Reassignment failed — please try again.");
+        return;
+      }
+      setResult({
+        new_file_number: body?.new_file_number ?? "",
+        new_hospital: body?.new_hospital ?? newHospital,
+        removed_pending_billing: body?.removed_pending_billing ?? 0,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <Block title="Hospital reassignment complete">
+        <div className="space-y-2 text-sm">
+          <p>
+            New file number: <span className="file-number font-semibold">{result.new_file_number}</span>{" "}
+            at {result.new_hospital}. The old number ({currentFileNumber}) stays searchable and can
+            never be issued to another patient.
+          </p>
+          {result.removed_pending_billing > 0 ? (
+            <p className="text-state-warning text-xs">
+              {result.removed_pending_billing} un-exported billing row(s) under the old hospital were
+              removed — re-stage this patient in the correct hospital&rsquo;s batch if needed.
+            </p>
+          ) : null}
+          <p className="text-xs text-text-secondary">
+            Next: print the updated onboarding PDF and relabel the physical folder.
+          </p>
+          <button className="btn-primary" onClick={() => window.location.reload()}>
+            Refresh to see the updated record
+          </button>
+        </div>
+      </Block>
+    );
+  }
+
+  return (
+    <Block title="Administrative — wrong hospital?">
+      {!open ? (
+        <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-text-secondary">
+            If this patient was onboarded under the wrong hospital, reassigning issues a NEW file
+            number under the correct prefix. The old number is retired but stays searchable.
+          </p>
+          <button className="btn-secondary shrink-0" onClick={() => setOpen(true)} disabled={otherHospitals.length === 0}>
+            Reassign hospital…
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-text-secondary">Correct hospital</span>
+              <select className="input" value={newHospital} onChange={(e) => setNewHospital(e.target.value)} disabled={busy}>
+                <option value="">Select…</option>
+                {otherHospitals.map((h) => (
+                  <option key={h.name} value={h.name}>{h.name} ({h.file_prefix})</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-text-secondary">
+                Type the current file number to confirm ({currentFileNumber})
+              </span>
+              <input
+                className="input font-mono"
+                value={confirmNumber}
+                onChange={(e) => setConfirmNumber(e.target.value)}
+                placeholder={currentFileNumber}
+                disabled={busy}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-text-secondary">Reason (min 10 characters — recorded in the audit log)</span>
+            <input
+              className="input"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Onboarded under Nkanyezi in error; patient is admitted at Fountain"
+              disabled={busy}
+            />
+          </label>
+          <p className="text-xs text-text-secondary">
+            This issues a new file number immediately. Un-exported billing rows under the old
+            hospital are removed; exported batches are untouched. The change is permanently audited.
+          </p>
+          {error ? <p className="text-state-danger text-xs">{error}</p> : null}
+          <div className="flex gap-2">
+            <button
+              className="btn-primary"
+              disabled={busy || !newHospital || reasonTooShort || !confirmed}
+              onClick={submit}
+            >
+              {busy ? "Reassigning…" : "Reassign and issue new file number"}
+            </button>
+            <button className="btn-secondary" disabled={busy} onClick={() => { setOpen(false); setError(null); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Block>
   );
 }
 

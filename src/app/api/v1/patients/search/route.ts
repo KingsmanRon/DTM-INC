@@ -80,13 +80,47 @@ export async function GET(req: NextRequest) {
     if (error) return jsonError(500, "db_error", error.message);
 
     void session;
-    const rows = data ?? [];
+    const rows: Array<Record<string, unknown>> = data ?? [];
     const hasMore = rows.length > pageSize;
-    const pageRows = (hasMore ? rows.slice(0, pageSize) : rows).map((r) => ({
+    let pageRows = hasMore ? rows.slice(0, pageSize) : rows;
+
+    // RETIRED file numbers stay findable (0053): a paper folder may still be
+    // labelled with a number that was reassigned to another hospital. When the
+    // term looks like a file-number prefix, also resolve it through the
+    // history table and surface the match with its former number.
+    if (q.length >= 3 && page === 1) {
+      const { data: historyRows } = await supabase
+        .from("patient_file_number_history")
+        .select("patient_id, old_file_number")
+        .ilike("old_file_number", `${q}%`)
+        .limit(pageSize);
+      const formerByPatient = new Map<string, string>();
+      for (const h of historyRows ?? []) {
+        if (!formerByPatient.has(h.patient_id)) formerByPatient.set(h.patient_id, h.old_file_number);
+      }
+      const missingIds = Array.from(formerByPatient.keys()).filter(
+        (pid) => !pageRows.some((r) => r.id === pid)
+      );
+      if (missingIds.length > 0) {
+        let historyQuery = supabase
+          .from("active_patients")
+          .select("id, file_number, title, first_names, surname, id_number, phone, payer_type, status, updated_at")
+          .in("id", missingIds);
+        if (prefix) historyQuery = historyQuery.ilike("file_number", `${prefix}-%`);
+        const { data: historyPatients } = await historyQuery.limit(pageSize);
+        pageRows = [...pageRows, ...(historyPatients ?? [])].slice(0, pageSize);
+      }
+      pageRows = pageRows.map((r) => ({
+        ...r,
+        former_file_number: formerByPatient.get(r.id as string) ?? null,
+      }));
+    }
+
+    const masked = pageRows.map((r) => ({
       ...r,
       id_number: maskIdNumber(r.id_number as string | null),
     }));
-    return jsonOk({ data: pageRows, page, pageSize, hasMore });
+    return jsonOk({ data: masked, page, pageSize, hasMore });
   } catch (err) {
     return handleRouteError(err);
   }
