@@ -47,21 +47,14 @@ export const IdNumberSchema = z
   });
 
 // Section A — Patient details
-export const HospitalEnum = z.enum(
-  [
-    "Nkanyezi Private Hospital",
-    "Fountain Private Hospital",
-    "Mediclinic Vereeniging Hospital",
-    "Midvaal Private Hospital",
-  ],
-  {
-    errorMap: () => ({ message: "Please select a valid hospital." }),
-  }
-);
-
+//
+// Hospital is a plain string at the schema layer: the allowed values live in
+// public.hospitals (migration 0044), so the list changes per practice without
+// a code change. The API route checks the value against the table (422), and
+// onboard_patient() hard-fails on unknown/inactive as the backstop.
 export const SectionA = z
   .object({
-    hospital: HospitalEnum,
+    hospital: z.string().min(1, "Please select a hospital."),
     is_minor: z.boolean().default(false),
     title: TitleEnum,
     first_names: z.string().min(1, "Patient first names are required."),

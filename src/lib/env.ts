@@ -8,17 +8,23 @@ const ServerEnv = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(20).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
-  SUPABASE_AUDIT_DB_URL: z.string().optional(),
   CLINICAL_NOTES_KEK_ID: z.string().default("vault:clinical-notes-kek/v1"),
   CLINICAL_NOTES_KEY_PROVIDER: z.enum(["vault", "dev"]).default("vault"),
-  ALLOW_DEV_KEK_FALLBACK: z.coerce.boolean().default(true),
+  // Raw string here; resolved to a boolean in the .transform below.
+  //   * Previous code used z.coerce.boolean(), for which the STRING "false" is
+  //     truthy — setting ALLOW_DEV_KEK_FALLBACK=false never actually disabled it.
+  //   * The default is now environment-aware: in production the fallback is OFF
+  //     unless explicitly set to "true". Silently re-keying new clinical notes
+  //     to the dev key during a Vault outage is exactly the failure a prod
+  //     deployment must fail CLOSED on. (Verify Vault reads succeed before
+  //     relying on this in prod — see docs/internal/v2-fix-plan.md item 11.)
+  ALLOW_DEV_KEK_FALLBACK: z.enum(["true", "false"]).optional(),
   CLINICAL_NOTES_KEK_DEV_KEY: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
   SESSION_IDLE_TIMEOUT_STAFF_MIN: z.coerce.number().default(30),
   SESSION_IDLE_TIMEOUT_DOCTOR_MIN: z.coerce.number().default(15),
   SESSION_IDLE_TIMEOUT_ADMIN_MIN: z.coerce.number().default(15),
-  PDF_SERVICE_SHARED_SECRET: z.string().optional(),
   FEATURE_HANDWRITTEN_NOTES: EnvBoolean,
   FEATURE_HANDWRITTEN_NOTES_DOCTOR_IDS: z.string().default(""),
   FEATURE_HANDWRITTEN_NOTES_FINALISE: EnvBoolean,
@@ -71,7 +77,15 @@ const ServerEnv = z.object({
     });
   }
 
-});
+}).transform((env) => ({
+  ...env,
+  // Fail closed in production: dev-key fallback only when explicitly "true".
+  // Outside production it stays on by default for local DX.
+  ALLOW_DEV_KEK_FALLBACK:
+    env.ALLOW_DEV_KEK_FALLBACK === undefined
+      ? env.NODE_ENV !== "production"
+      : env.ALLOW_DEV_KEK_FALLBACK === "true",
+}));
 
 let cached: z.infer<typeof ServerEnv> | null = null;
 

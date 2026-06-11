@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BILLING_HOSPITALS, CASH_PAYER_LABEL, HOSPITAL_FILE_PREFIX, billingFilename, monthLabel } from "@/lib/billing/format";
+import { CASH_PAYER_LABEL, billingFilename, monthLabel } from "@/lib/billing/format";
 import type { BillingPayerType } from "@/lib/billing/rows";
+
+// Hospitals come from the server page (public.hospitals via RLS, migration
+// 0044) — the hardcoded list/prefix map is gone, so a new practice's hospitals
+// appear here without a code change.
+export type HospitalOption = { name: string; file_prefix: string };
 
 type SearchResult = {
   id: string;
@@ -42,24 +47,24 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
-export function BillingClient() {
+export function BillingClient({ hospitals }: { hospitals: HospitalOption[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
   const hospital = useMemo(() => {
     const fromUrl = params.get("hospital");
-    return BILLING_HOSPITALS.includes(fromUrl as (typeof BILLING_HOSPITALS)[number])
+    return hospitals.some((h) => h.name === fromUrl)
       ? (fromUrl as string)
-      : BILLING_HOSPITALS[0];
-  }, [params]);
+      : hospitals[0]?.name ?? "";
+  }, [params, hospitals]);
 
   const month = useMemo(() => {
     const fromUrl = params.get("month");
     return fromUrl && /^\d{4}-\d{2}$/.test(fromUrl) ? fromUrl : currentMonthInput();
   }, [params]);
 
-  const prefix = HOSPITAL_FILE_PREFIX[hospital] ?? "";
+  const prefix = hospitals.find((h) => h.name === hospital)?.file_prefix ?? "";
 
   const [batch, setBatch] = useState<BatchItem[]>([]);
   const [loadingBatch, setLoadingBatch] = useState(false);
@@ -285,8 +290,8 @@ export function BillingClient() {
               value={hospital}
               onChange={(e) => setParam("hospital", e.target.value)}
             >
-              {BILLING_HOSPITALS.map((h) => (
-                <option key={h} value={h}>{h}</option>
+              {hospitals.map((h) => (
+                <option key={h.name} value={h.name}>{h.name}</option>
               ))}
             </select>
           </div>

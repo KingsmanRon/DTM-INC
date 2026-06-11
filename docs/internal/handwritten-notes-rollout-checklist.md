@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-06-11):** feature is LIVE in prod (0027/0028 applied, all flags on). Kept for history; see docs/internal/v2-fix-plan.md.
+
 # Handwritten clinical notes — rollout & verification checklist
 
 > **"main" (prod deploy branch) is `claude/patient-onboarding-pwa-PFlAh`.**

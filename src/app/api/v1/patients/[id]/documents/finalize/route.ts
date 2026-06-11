@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 import { checkDocumentContent } from "@/lib/documents/validate";
@@ -66,7 +66,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const sha256 = createHash("sha256").update(bytes).digest("hex");
 
-    const { data, error: dbErr } = await admin
+    // RLS client for the row insert (review #9): doctor/staff insert policy
+    // stays in the path — and a nonexistent patient id now fails the FK under
+    // the caller's own context. The admin client remains only for Storage
+    // (download/remove), which has no authenticated-role policies by design.
+    const rls = await getSupabaseServer();
+    const { data, error: dbErr } = await rls
       .from("patient_documents")
       .insert({
         patient_id: id,

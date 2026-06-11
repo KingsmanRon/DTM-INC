@@ -19,7 +19,7 @@ import type { AppRole } from "@/lib/auth/session";
 
 export type AuditAction =
   | "login_success" | "login_failure" | "login_lockout" | "logout"
-  | "patient_create" | "patient_update" | "patient_archive" | "patient_unarchive"
+  | "patient_view" | "patient_create" | "patient_update" | "patient_archive" | "patient_unarchive"
   | "document_upload" | "document_view" | "document_download" | "document_archive" | "document_rename"
   | "note_create" | "note_read" | "note_amend" | "note_finalise" | "clinical_note_voided"
   | "user_create" | "user_deactivate" | "user_reset_mfa" | "permission_change"
@@ -38,7 +38,42 @@ export type AuditInput = {
   metadata?: Record<string, unknown>;
   ipAddress?: string | null;
   userAgent?: string | null;
+  // When the audited action actually happened. Stamped automatically on the
+  // first write attempt and carried through the outbox, so an event drained
+  // hours later still records its true time (audit_logs.occurred_at). The
+  // chain's created_at is chosen by the DATABASE clock inside
+  // write_audit_entry_atomic (0048) and cannot be set from here.
+  occurredAt?: string;
 };
+
+// Postgres jsonb renders non-integer numbers with their stored precision
+// ("1.0") while JS JSON.stringify(1.0) yields "1" — one float in metadata
+// would make the SQL-computed entry hash unverifiable from the JS verifiers.
+// Integers, strings, booleans, null, and nested arrays/objects of those are
+// canonicalisation-safe; anything else is serialised to a string BEFORE it
+// reaches the chain. (See audit_canonical_json in migration 0029.)
+function sanitizeMetadataValue(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? value : String(value);
+  }
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map(sanitizeMetadataValue);
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = sanitizeMetadataValue(v);
+    }
+    return out;
+  }
+  return String(value);
+}
+
+export function sanitizeAuditMetadata(
+  metadata: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  return (sanitizeMetadataValue(metadata ?? {}) ?? {}) as Record<string, unknown>;
+}
 
 // Stable JSON serialisation: sort keys recursively so the hash is reproducible.
 function canonicalJson(v: unknown): string {
@@ -212,7 +247,10 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
   const admin = getSupabaseAdmin();
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  const createdAt = new Date().toISOString();
+  // p_created_at feeds audit_logs.occurred_at (0048): the time the action
+  // happened, surviving outbox delays. The chain's created_at is stamped by
+  // the DB clock inside the function and cannot be influenced from here.
+  const occurredAt = input.occurredAt ?? new Date().toISOString();
   logSupabaseCall({ caller: "writeAuditImmediate", client: "admin", action: "rpc", target: "write_audit_entry_atomic" });
   const { error } = await admin.rpc("write_audit_entry_atomic", {
     p_actor_user_id: input.actorUserId,
@@ -221,10 +259,10 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
     p_entity_type: input.entityType ?? null,
     p_entity_id: input.entityId ?? null,
     p_patient_id: input.patientId ?? null,
-    p_metadata_json: input.metadata ?? {},
+    p_metadata_json: sanitizeAuditMetadata(input.metadata),
     p_ip_address: input.ipAddress ?? null,
     p_user_agent: input.userAgent ?? null,
-    p_created_at: createdAt,
+    p_created_at: occurredAt,
   });
 
   if (!error) return true;
@@ -250,6 +288,10 @@ async function writeAuditImmediate(input: AuditInput): Promise<boolean> {
 }
 
 export async function writeAudit(input: AuditInput): Promise<void> {
+  // Stamp the event time on the FIRST attempt so retries and the outbox carry
+  // the original moment, not whenever the write finally succeeded.
+  if (!input.occurredAt) input = { ...input, occurredAt: new Date().toISOString() };
+
   if (Date.now() < auditCircuitOpenUntil) {
     await enqueueAudit(input, "circuit_open");
     return;
@@ -281,59 +323,103 @@ export async function writeAudit(input: AuditInput): Promise<void> {
   }
 }
 
-// Chain verification utility. Used by the daily cron (AC-7) and the
+// Chain verification. Used by the daily cron (AC-7) and the
 // scripts/verify-audit-chain.mjs admin tool.
-export async function verifyChain(): Promise<{ ok: boolean; brokenAt?: string }> {
+//
+// Walk order is chain_position (0048) — the chain's physical insertion order —
+// never created_at, which clock skew between writers can reorder.
+//
+// Incremental by default: a checkpoint row (audit_verify_checkpoints, 0049)
+// records the last position+hash that verified clean, and the next run resumes
+// from there, keeping the daily cron O(new rows) instead of O(history).
+// `full: true` re-walks from genesis (weekly / on demand / after any incident).
+// The checkpoint only ever advances after a clean segment.
+const VERIFY_CHECKPOINT_NAME = "audit_chain";
+
+type VerifyOptions = { full?: boolean };
+
+export async function verifyChain(options: VerifyOptions = {}): Promise<{
+  ok: boolean;
+  brokenAt?: string;
+  checked: number;
+  from_position: number;
+}> {
   const admin = getSupabaseAdmin();
   const pageSize = 1000;
-  // Composite cursor (created_at, id): `created_at` has millisecond-resolution
-  // ties in practice, so filtering with `gt(created_at, cursor)` alone skips
-  // any subsequent row that shares the cursor's timestamp. We instead page on
-  // (created_at, id) lexicographically.
-  let cursorCreatedAt: string | null = null;
-  let cursorId: string | null = null;
+
+  let cursorPosition = 0;
   let prevHash: string | null = null;
+
+  if (!options.full) {
+    const { data: checkpoint, error: cpErr } = await admin
+      .from("audit_verify_checkpoints")
+      .select("last_position, last_entry_hash")
+      .eq("name", VERIFY_CHECKPOINT_NAME)
+      .maybeSingle();
+    // A checkpoint read failure is not a verification failure — fall back to a
+    // full walk rather than reporting the chain broken.
+    if (!cpErr && checkpoint) {
+      cursorPosition = checkpoint.last_position;
+      prevHash = checkpoint.last_entry_hash;
+    }
+  }
+
+  const startPosition = cursorPosition;
+  let checked = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    let q = admin
+    const { data, error } = await admin
       .from("audit_logs")
       .select("*")
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true })
+      .gt("chain_position", cursorPosition)
+      .order("chain_position", { ascending: true })
       .limit(pageSize);
-    if (cursorCreatedAt && cursorId) {
-      // (created_at, id) > (cursor_created_at, cursor_id)
-      q = q.or(
-        `created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`
-      );
+    if (error) {
+      return { ok: false, brokenAt: `query_failed_after_${cursorPosition}`, checked, from_position: startPosition };
     }
-    const { data, error } = await q;
-    if (error) return { ok: false, brokenAt: cursorId ?? "unknown" };
-    if (!data || data.length === 0) return { ok: true };
+    if (!data || data.length === 0) break;
 
     for (const row of data) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, entry_hash, chain_anchor_id, ...rest } = row;
+      // Explicit field list: chain_position, occurred_at, and chain_anchor_id
+      // ride OUTSIDE the entry hash by design.
       const expected = computeEntryHash(prevHash, {
-        actor_user_id: rest.actor_user_id,
-        actor_role: rest.actor_role,
-        action: rest.action,
-        entity_type: rest.entity_type,
-        entity_id: rest.entity_id,
-        patient_id: rest.patient_id,
-        metadata_json: rest.metadata_json,
-        ip_address: rest.ip_address,
-        user_agent: rest.user_agent,
-        created_at: canonicalTimestamp(rest.created_at),
-        prev_hash: rest.prev_hash,
+        actor_user_id: row.actor_user_id,
+        actor_role: row.actor_role,
+        action: row.action,
+        entity_type: row.entity_type,
+        entity_id: row.entity_id,
+        patient_id: row.patient_id,
+        metadata_json: row.metadata_json,
+        ip_address: row.ip_address,
+        user_agent: row.user_agent,
+        created_at: canonicalTimestamp(row.created_at),
+        prev_hash: row.prev_hash,
       });
-      if (expected !== entry_hash) return { ok: false, brokenAt: row.id };
-      prevHash = entry_hash;
-      cursorCreatedAt = row.created_at;
-      cursorId = row.id;
+      if (expected !== row.entry_hash) {
+        return { ok: false, brokenAt: row.id, checked, from_position: startPosition };
+      }
+      prevHash = row.entry_hash;
+      cursorPosition = row.chain_position;
+      checked++;
     }
 
-    if (data.length < pageSize) return { ok: true };
+    if (data.length < pageSize) break;
   }
+
+  // Advance the checkpoint only after a clean walk, and only when there was a
+  // verified tail to record.
+  if (checked > 0 && prevHash) {
+    const { error: upsertErr } = await admin.from("audit_verify_checkpoints").upsert({
+      name: VERIFY_CHECKPOINT_NAME,
+      last_position: cursorPosition,
+      last_entry_hash: prevHash,
+      verified_at: new Date().toISOString(),
+    });
+    if (upsertErr) {
+      console.error("[audit-chain] checkpoint update failed", { error: upsertErr.message });
+    }
+  }
+
+  return { ok: true, checked, from_position: startPosition };
 }

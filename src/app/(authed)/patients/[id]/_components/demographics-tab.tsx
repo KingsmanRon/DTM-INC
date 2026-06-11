@@ -75,8 +75,9 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
     const current = data;
     setSaving(true);
     setError(null);
+    // hospital is deliberately NOT sent: it is fixed at onboarding (the file
+    // number carries its prefix) and the server rejects changes (0047).
     const payload = {
-      hospital: form.hospital,
       title: form.title,
       first_names: form.first_names,
       surname: form.surname,
@@ -169,7 +170,12 @@ export function DemographicsTab({ patientId, initialData }: { patientId: string;
             </div>
             <SectionHeading title="Hospital information" />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Hospital" value={form.hospital} onChange={(v) => setForm((f) => ({ ...f, hospital: v }))} />
+              {/* Hospital is fixed at onboarding — the file number carries its
+                  prefix. Read-only here; moving a patient is an operator action. */}
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-text-secondary">Hospital (fixed at onboarding)</span>
+                <input className="input bg-white/[0.02] opacity-60" value={form.hospital} disabled readOnly />
+              </label>
               <SelectField
                 label="Payer type"
                 value={form.payer_type}

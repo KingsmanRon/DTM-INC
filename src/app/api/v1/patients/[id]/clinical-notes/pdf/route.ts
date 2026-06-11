@@ -9,6 +9,7 @@ import { byteaToCryptoBuffer } from "@/lib/bytea";
 import { clientIp, handleRouteError, jsonError } from "@/lib/api/http";
 import { getHandwrittenNotesFeatures } from "@/lib/clinical-notes/features";
 import { renderClinicalNotesPdf } from "@/lib/pdf/clinical-notes";
+import { getPdfLogoBuffer } from "@/lib/pdf/logo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const pdf = await renderClinicalNotesPdf({
+      logo: await getPdfLogoBuffer(),
       practice: {
         name: practice?.practice_name ?? "",
         doctorName: practice?.doctor_name ?? "",

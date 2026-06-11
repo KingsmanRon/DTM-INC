@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
+import {
+  DependantSchema,
+  OnboardingPayload,
+  SectionA,
+  SectionB,
+  SectionC,
+  SectionD,
+  SectionE,
+  TitleEnum,
+} from "@/lib/validation/patient";
+
+export type ConsentCard = { badge: string; title: string; body: string };
+export type HospitalOption = { name: string; file_prefix: string };
 
 type Draft = {
   section_a: {
-    hospital:
-      | "Nkanyezi Private Hospital"
-      | "Fountain Private Hospital"
-      | "Mediclinic Vereeniging Hospital"
-      | "Midvaal Private Hospital";
+    hospital: string;
     is_minor: boolean;
     title: string;
     first_names: string;
@@ -72,7 +81,7 @@ type Draft = {
 
 const emptyDraft: Draft = {
   section_a: {
-    hospital: "Nkanyezi Private Hospital",
+    hospital: "",
     is_minor: false,
     title: "Mr",
     first_names: "",
@@ -128,6 +137,11 @@ const STEPS = [
 
 const CONSENT_SUMMARY_VERSION = "cards-v1";
 
+// Drafts survive a refresh/navigation but NOT closing the tab: sessionStorage
+// is per-tab and discarded with it, which is the right ceiling for PHI on a
+// shared front-desk machine. Cleared on successful submit and by "Start over".
+const DRAFT_STORAGE_KEY = "dtm.onboarding.draft.v1";
+
 const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
   onboarding_failed: "We couldn’t save this patient. Please check required fields and try again.",
   validation_error:
@@ -136,18 +150,21 @@ const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
     "This consent version is no longer current. Refresh the page and review consent before submitting again.",
   duplicate_patient:
     "A patient with this ID number already exists. Search for and open the existing record instead of creating another file.",
+  invalid_hospital: "Please select a valid hospital.",
 };
 
-const CONSENT_CARDS = [
+// Fallback when practice_settings.consent_cards is empty (pre-0051 database).
+// The live wording is data: see migration 0051 and the admin settings PATCH.
+const FALLBACK_CONSENT_CARDS: ConsentCard[] = [
   {
     badge: "A",
     title: "Treatment consent",
-    body: "I consent to consultation, examination and treatment by Dr. Thomas Mtshali and to such investigations and procedures as may, in his clinical judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.",
+    body: "I consent to consultation, examination and treatment by the practice and to such investigations and procedures as may, in the clinician's judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.",
   },
   {
     badge: "B",
     title: "Information processing under POPIA",
-    body: 'I authorise Dr. Thomas Mtshali Inc. ("the Practice") to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.',
+    body: "I authorise the Practice to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.",
   },
   {
     badge: "C",
@@ -159,7 +176,7 @@ const CONSENT_CARDS = [
     title: "Dependants (where applicable)",
     body: "Where I am the main member or legal guardian of any dependant whose details I provide, I confirm I am authorised to give the above consents on their behalf.",
   },
-] as const;
+];
 
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
@@ -169,18 +186,89 @@ async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
+// "section_a.first_names: Required" -> "First names: Required"
+function humanizePath(path: Array<string | number>): string {
+  const last = path[path.length - 1];
+  if (last === undefined) return "";
+  const label = String(last).replaceAll("_", " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function zodIssues(result: { success: boolean; error?: { issues: Array<{ path: Array<string | number>; message: string }> } }): string[] {
+  if (result.success || !result.error) return [];
+  return result.error.issues.map((i) => {
+    const label = humanizePath(i.path);
+    return label ? `${label}: ${i.message}` : i.message;
+  });
+}
+
 export function OnboardingWizard(props: {
   consentVersion: string;
   consentBody: string;
   privacyNotice: string;
+  consentCards: ConsentCard[];
+  hospitals: HospitalOption[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<Draft>(() => ({
+    ...emptyDraft,
+    section_a: { ...emptyDraft.section_a, hospital: props.hospitals[0]?.name ?? "" },
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
+  const [stepErrors, setStepErrors] = useState<string[]>([]);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const restoreDone = useRef(false);
   const submitInFlight = useRef(false);
+
+  const consentCards = props.consentCards.length > 0 ? props.consentCards : FALLBACK_CONSENT_CARDS;
+
+  // Restore an unsubmitted draft AFTER mount (not in the state initializer) so
+  // server and client first-render markup match — no hydration mismatch.
+  useEffect(() => {
+    if (restoreDone.current) return;
+    restoreDone.current = true;
+    try {
+      const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { version?: number; draft?: Draft } | null;
+      if (parsed?.version === 1 && parsed.draft) {
+        setDraft(parsed.draft);
+        setRestoredDraft(true);
+      }
+    } catch {
+      /* corrupt/absent draft — start clean */
+    }
+  }, []);
+
+  // Persist on every change (a refresh mid-form used to destroy all 7 steps).
+  useEffect(() => {
+    if (!restoreDone.current) return;
+    try {
+      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, draft }));
+    } catch {
+      /* storage full/unavailable — the form still works, just without recovery */
+    }
+  }, [draft]);
+
+  function clearStoredDraft() {
+    try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
+  }
+
+  function startOver() {
+    clearStoredDraft();
+    setDraft({
+      ...emptyDraft,
+      section_a: { ...emptyDraft.section_a, hospital: props.hospitals[0]?.name ?? "" },
+    });
+    setStep(0);
+    setStepErrors([]);
+    setIssues([]);
+    setError(null);
+    setRestoredDraft(false);
+  }
 
   function applySameAsPatient(value: boolean) {
     setDraft((d) => {
@@ -227,6 +315,60 @@ export function OnboardingWizard(props: {
     return null;
   }, [draft.section_a]);
 
+  // Guardian ID gets the same checksum scrutiny as the patient's — but as a
+  // WARNING only: Section B has no id_type field, so a passport number that
+  // happens to be 13 digits must not hard-block the form.
+  const bIdWarning = useMemo(() => {
+    const idNumber = draft.section_b.id_number.trim();
+    if (/^\d{13}$/.test(idNumber) && !isValidSaId(idNumber)) {
+      return "This looks like an SA ID number but its checksum fails — double-check before continuing.";
+    }
+    return null;
+  }, [draft.section_b.id_number]);
+
+  // Per-step validation (review #20): the SAME zod schemas the server enforces,
+  // run when the user clicks Next — so a Section A typo surfaces on Section A,
+  // not as a rejected submit after all seven steps.
+  const stepValidators: Array<(d: Draft) => string[]> = [
+    (d) => zodIssues(SectionA.safeParse(d.section_a)),
+    (d) => zodIssues(SectionB.safeParse(d.section_b)),
+    (d) => zodIssues(SectionC.safeParse(d.section_c)),
+    (d) => zodIssues(SectionD.safeParse(d.section_d)),
+    (d) => zodIssues(SectionE.safeParse(d.section_e)),
+    (d) =>
+      d.dependants.flatMap((dep, i) =>
+        zodIssues(DependantSchema.safeParse(dep)).map((msg) => `Dependant ${i + 1} — ${msg}`)
+      ),
+  ];
+
+  function goNext() {
+    const validate = stepValidators[step];
+    const errs = validate ? validate(draft) : [];
+    if (errs.length > 0) {
+      setStepErrors(errs);
+      return;
+    }
+    setStepErrors([]);
+    setStep(Math.min(STEPS.length - 1, step + 1));
+  }
+
+  function goBack() {
+    setStepErrors([]);
+    setStep(Math.max(0, step - 1));
+  }
+
+  function stepForPath(path: Array<string | number>): number {
+    switch (path[0]) {
+      case "section_a": return 0;
+      case "section_b": return 1;
+      case "section_c": return 2;
+      case "section_d": return 3;
+      case "section_e": return 4;
+      case "dependants": return 5;
+      default: return 6;
+    }
+  }
+
   async function onSubmit() {
     if (submitInFlight.current) return;
     submitInFlight.current = true;
@@ -251,6 +393,27 @@ export function OnboardingWizard(props: {
           patient_present_attestation: draft.consent.patient_present_attestation,
         },
       };
+
+      // Full client-side validation BEFORE the network: same schema the server
+      // runs, including the minor/guardian cross-section rules. On failure,
+      // jump to the earliest offending section with its errors shown.
+      const parsed = OnboardingPayload.safeParse(payload);
+      if (!parsed.success) {
+        const allIssues = parsed.error.issues;
+        const firstStep = Math.min(...allIssues.map((i) => stepForPath(i.path)));
+        const messages = allIssues.map((i) => {
+          const label = humanizePath(i.path);
+          return label ? `${label}: ${i.message}` : i.message;
+        });
+        if (firstStep < 6) {
+          setStep(firstStep);
+          setStepErrors(messages);
+        } else {
+          setIssues(messages);
+        }
+        return;
+      }
+
       const res = await fetch("/api/v1/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -273,6 +436,7 @@ export function OnboardingWizard(props: {
         }
         return;
       }
+      clearStoredDraft();
       router.push(`/patients/${body.id}`);
     } finally {
       submitInFlight.current = false;
@@ -286,13 +450,24 @@ export function OnboardingWizard(props: {
   const D = draft.section_d;
   const E = draft.section_e;
 
+  if (props.hospitals.length === 0) {
+    return (
+      <div className="card">
+        <p className="text-state-danger text-sm">
+          No active hospitals are configured for this practice yet. An administrator must add
+          hospitals (public.hospitals) before patients can be onboarded.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <nav className="flex flex-wrap gap-2">
+      <nav className="flex flex-wrap items-center gap-2">
         {STEPS.map((label, i) => (
           <button
             key={label}
-            onClick={() => setStep(i)}
+            onClick={() => { setStepErrors([]); setStep(i); }}
             className={`text-xs px-3 py-1.5 rounded border ${
               i === step
                 ? "bg-accent-dtm-green border-accent-dtm-green text-white"
@@ -302,9 +477,28 @@ export function OnboardingWizard(props: {
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={startOver}
+          className="ml-auto text-xs px-3 py-1.5 rounded border border-border-subtle text-text-secondary hover:text-white"
+        >
+          Start over
+        </button>
       </nav>
 
+      {restoredDraft ? (
+        <p className="text-xs text-text-secondary">
+          Restored your unsubmitted draft from this session. Use “Start over” to discard it.
+        </p>
+      ) : null}
+
       <div className="card space-y-4">
+        {stepErrors.length > 0 ? (
+          <ul className="text-state-danger text-sm list-disc pl-5">
+            {stepErrors.map((e) => <li key={e}>{e}</li>)}
+          </ul>
+        ) : null}
+
         {step === 0 && (
           <>
             <h2 className="section-title">A — Patient details</h2>
@@ -313,20 +507,17 @@ export function OnboardingWizard(props: {
                 <select
                   className="input"
                   value={A.hospital}
-                  onChange={(e) =>
-                    setDraft({ ...draft, section_a: { ...A, hospital: e.target.value as Draft["section_a"]["hospital"] } })
-                  }
+                  onChange={(e) => setDraft({ ...draft, section_a: { ...A, hospital: e.target.value } })}
                 >
-                  <option value="Nkanyezi Private Hospital">Nkanyezi Private Hospital</option>
-                  <option value="Fountain Private Hospital">Fountain Private Hospital</option>
-                  <option value="Mediclinic Vereeniging Hospital">Mediclinic Vereeniging Hospital</option>
-                  <option value="Midvaal Private Hospital">Midvaal Private Hospital</option>
+                  {props.hospitals.map((h) => (
+                    <option key={h.name} value={h.name}>{h.name}</option>
+                  ))}
                 </select>
               </Field>
 
               <Field label="Title">
                 <select className="input" value={A.title} onChange={(e) => setDraft({ ...draft, section_a: { ...A, title: e.target.value } })}>
-                  {["Mr", "Mrs", "Miss", "Dr", "Prof", "Other"].map((t) => (
+                  {TitleEnum.options.map((t) => (
                     <option key={t}>{t}</option>
                   ))}
                 </select>
@@ -434,14 +625,22 @@ export function OnboardingWizard(props: {
               Same as patient
             </label>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="Title" required>
+                <select className="input" value={B.title} onChange={(e) => setDraft({ ...draft, section_b: { ...B, title: e.target.value } })}>
+                  {TitleEnum.options.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </Field>
               <Field label="First names" required>
                 <input className="input" value={B.first_names} onChange={(e) => setDraft({ ...draft, section_b: { ...B, first_names: e.target.value } })} />
               </Field>
               <Field label="Surname" required>
                 <input className="input" value={B.surname} onChange={(e) => setDraft({ ...draft, section_b: { ...B, surname: e.target.value } })} />
               </Field>
-              <Field label="ID number" required>
+              <Field label="ID number" required error={undefined}>
                 <input className="input" value={B.id_number} onChange={(e) => setDraft({ ...draft, section_b: { ...B, id_number: e.target.value } })} />
+                {bIdWarning ? <p className="text-state-warning text-xs mt-1">{bIdWarning}</p> : null}
               </Field>
               <Field label="Date of birth" required>
                 <input type="date" className="input" value={B.date_of_birth} onChange={(e) => setDraft({ ...draft, section_b: { ...B, date_of_birth: e.target.value } })} />
@@ -628,7 +827,7 @@ export function OnboardingWizard(props: {
             </div>
 
             <div className="space-y-3">
-              {CONSENT_CARDS.map((card) => (
+              {consentCards.map((card) => (
                 <section key={card.badge} className="rounded-lg border border-border-subtle bg-bg-primary p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-7 h-7 shrink-0 rounded-full bg-accent-teal/20 text-accent-teal text-xs font-semibold grid place-items-center">
@@ -667,7 +866,7 @@ export function OnboardingWizard(props: {
             </div>
 
             <div className="flex items-center gap-3 border-t border-border-subtle pt-4">
-              <button className="btn-secondary" onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
+              <button className="btn-secondary" onClick={goBack}>Back</button>
               <div className="flex-1">
                 {error ? <p className="text-state-danger text-sm">{error}</p> : null}
                 {issues.length > 0 ? (
@@ -685,8 +884,8 @@ export function OnboardingWizard(props: {
 
         {step < STEPS.length - 1 && (
           <div className="flex justify-between pt-4 border-t border-border-subtle">
-            <button className="btn-secondary" disabled={step === 0} onClick={() => setStep(Math.max(0, step - 1))}>Back</button>
-            <button className="btn-secondary" onClick={() => setStep(Math.min(STEPS.length - 1, step + 1))}>Next</button>
+            <button className="btn-secondary" disabled={step === 0} onClick={goBack}>Back</button>
+            <button className="btn-secondary" onClick={goNext}>Next</button>
           </div>
         )}
       </div>

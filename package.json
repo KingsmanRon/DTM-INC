@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "check:functions": "node scripts/check-canonical-functions.mjs",
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:verify-chain": "node scripts/verify-audit-chain.mjs",
     "db:audit-logs": "node scripts/fetch-audit-logs.mjs"

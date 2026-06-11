@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { PublicEnv } from "@/lib/env";
+import { Branding } from "@/lib/branding";
 
 // TOTP enrolment flow.
 // Supabase returns a qr_code (SVG data URI) and a secret on enrol(). We
@@ -53,8 +54,8 @@ export default function MfaEnrolPage() {
 
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
-        issuer: "DTM Inc",
-        friendlyName: "DTM Inc",
+        issuer: Branding.mfaIssuer,
+        friendlyName: Branding.mfaIssuer,
       });
       if (error) { setError(error.message); return; }
       if (data.type !== "totp") { setError("Unexpected MFA factor type"); return; }

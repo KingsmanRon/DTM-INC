@@ -12,6 +12,7 @@ const REAL_PNG = fs.readFileSync(
 describe("clinical notes PDF", () => {
   it("renders typed text, an embedded handwriting PNG, and a draft placeholder", async () => {
     const pdf = await renderClinicalNotesPdf({
+      logo: REAL_PNG,
       practice: { name: "Test Practice", doctorName: "Dr Test", qualifications: "MBChB", practiceNumber: "123", address: "1 Test St", phone: "000" },
       fileNumber: "DTM-0001",
       patientName: "Jane Doe",

@@ -205,8 +205,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const encryptedBody = input.body?.trim() ? encryptNoteBody(dek, input.body) : null;
       const encryptedInk = input.ink ? encryptNoteInk(dek, input.ink) : null;
 
-      const admin = getSupabaseAdmin();
-      const { data, error } = await admin
+      // RLS client on purpose (review #9): the doctor-only insert policy and
+      // the author-must-be-doctor trigger both stay in the path. The admin
+      // client is reserved for the DEK table (no authenticated INSERT policy).
+      const rls = await getSupabaseServer();
+      const { data, error } = await rls
         .from("clinical_notes")
         .insert({
           patient_id: id,

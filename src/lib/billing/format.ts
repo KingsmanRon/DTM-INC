@@ -2,23 +2,11 @@
 // imports here — both the API routes and the client billing page import these,
 // so the filename/slug/date rules stay in one place.
 
-export const BILLING_HOSPITALS = [
-  "Nkanyezi Private Hospital",
-  "Fountain Private Hospital",
-  "Mediclinic Vereeniging Hospital",
-  "Midvaal Private Hospital",
-] as const;
-
-export type BillingHospital = (typeof BILLING_HOSPITALS)[number];
-
-// Hospital -> file-number prefix (set together at onboarding, see migration
-// 0013). Used to scope the shared patient search to the selected hospital.
-export const HOSPITAL_FILE_PREFIX: Record<string, string> = {
-  "Nkanyezi Private Hospital": "NKA",
-  "Fountain Private Hospital": "FOU",
-  "Mediclinic Vereeniging Hospital": "MED",
-  "Midvaal Private Hospital": "MID",
-};
+// NOTE: the hospital list + file-number prefix map used to be hardcoded here
+// (BILLING_HOSPITALS / HOSPITAL_FILE_PREFIX). They now live in the
+// public.hospitals table (migration 0044): server pages fetch the list under
+// RLS and pass it to the billing client as props, so a new practice's
+// hospitals are data, not a code change.
 
 const MONTH_NAMES = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -105,7 +93,7 @@ export function billingFilename(hospital: string, monthInputOrFirstDay: string):
 
 // What the Medical Aid Number column carries for a private (cash) payer, in
 // both the batch screen and the exported spreadsheet. "CASH" rather than
-// "PRIVATE" because every hospital in BILLING_HOSPITALS is a "... Private
+// "PRIVATE" because the configured hospitals are typically "... Private
 // Hospital" — on a billing sheet that word is ambiguous, while CASH reads one
 // way only: bill the patient directly. A blank cell therefore keeps a single
 // meaning: a medical-aid patient whose membership number is genuinely missing.

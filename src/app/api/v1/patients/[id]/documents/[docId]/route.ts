@@ -116,3 +116,76 @@ export async function PATCH(
     return handleRouteError(err);
   }
 }
+
+// Remove a document from the patient's file — SOFT archive, never a hard
+// delete. Exists because mis-uploads happen at the front desk (wrong file on
+// the wrong patient) and POPIA's correction duty (s.24) needs a same-day fix:
+// the document disappears from the Documents tab (the list filters
+// archived_at IS NULL) while the bytes stay in Storage and the row stays in
+// the DB for the audit trail. Doctor + staff — the same roles that can upload
+// can correct an upload. Runs under the caller's RLS context.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; docId: string }> }
+) {
+  try {
+    const session = await requireRole(["doctor", "staff"]);
+    const { id, docId } = await params;
+
+    // Optional { reason } body — recorded in the audit row when supplied.
+    let reason: string | null = null;
+    try {
+      const body = (await req.json()) as { reason?: string } | null;
+      if (body && typeof body.reason === "string") {
+        reason = body.reason.trim().slice(0, 500) || null;
+      }
+    } catch {
+      /* no body — archiving without a stated reason is allowed */
+    }
+
+    const supabase = await getSupabaseServer();
+    const { data: existing, error: readErr } = await supabase
+      .from("patient_documents")
+      .select("id, original_filename, category, archived_at")
+      .eq("id", docId)
+      .eq("patient_id", id)
+      .maybeSingle();
+    if (readErr) return jsonError(500, "db_error", readErr.message);
+    if (!existing) return jsonError(404, "not_found");
+    if (existing.archived_at) {
+      return jsonError(409, "already_removed", "This document has already been removed.");
+    }
+
+    const { data: archived, error: archiveErr } = await supabase
+      .from("patient_documents")
+      .update({ archived_at: new Date().toISOString(), archived_by: session.userId })
+      .eq("id", docId)
+      .eq("patient_id", id)
+      .is("archived_at", null)
+      .select("id")
+      .maybeSingle();
+    if (archiveErr) return jsonError(500, "db_error", archiveErr.message);
+    // Raced by a concurrent removal — nothing transitioned, so do not audit.
+    if (!archived) return jsonError(409, "already_removed", "This document has already been removed.");
+
+    await writeAudit({
+      actorUserId: session.userId,
+      actorRole: session.role,
+      action: "document_archive",
+      entityType: "patient_documents",
+      entityId: docId,
+      patientId: id,
+      metadata: {
+        filename: existing.original_filename,
+        category: existing.category,
+        ...(reason ? { reason } : {}),
+      },
+      ipAddress: clientIp(req),
+      userAgent: req.headers.get("user-agent"),
+    });
+
+    return jsonOk({ removed: true });
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}

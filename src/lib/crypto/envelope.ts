@@ -49,6 +49,12 @@ async function getKek(): Promise<Buffer> {
     } catch (err) {
       if (!env.ALLOW_DEV_KEK_FALLBACK) throw err;
       if (!env.CLINICAL_NOTES_KEK_DEV_KEY) throw err;
+      // LOUD on purpose: every encryption from here on uses the fallback KEK
+      // from env, not Vault. If this appears in production logs, treat it as a
+      // Vault incident — do not let it run silently for days.
+      console.error("[crypto] VAULT KEK READ FAILED — USING DEV FALLBACK KEK", {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return decodeDevKey(env.CLINICAL_NOTES_KEK_DEV_KEY);
     }
   }
@@ -89,7 +95,12 @@ export async function unwrapDek(wrapped: Buffer): Promise<Buffer> {
       throw primaryErr;
     }
     const fallbackKek = decodeDevKey(env.CLINICAL_NOTES_KEK_DEV_KEY);
-    return decryptWrappedDekWithKek(wrapped, fallbackKek);
+    const dek = decryptWrappedDekWithKek(wrapped, fallbackKek);
+    // Reaching here means this patient's DEK was wrapped under the FALLBACK
+    // key, not Vault — i.e. it was created during a Vault outage. Loud so the
+    // affected keys can be found and re-wrapped under the Vault KEK.
+    console.error("[crypto] DEK unwrapped with DEV FALLBACK KEK — re-wrap this patient's DEK under the Vault KEK");
+    return dek;
   }
 }
 

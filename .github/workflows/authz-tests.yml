@@ -1,0 +1,39 @@
+name: AuthZ / RLS tests
+
+# Boots a throwaway local Supabase database, applies EVERY migration from
+# scratch (which itself proves the repo is self-containedly rebuildable —
+# review item 5), then runs the pgTAP authz suite in supabase/tests/.
+#
+# Kept as a separate workflow from the release gate: it needs Docker and takes
+# minutes. NEW HARNESS — if the first run trips on CLI/config details, fix
+# forward; do not delete the suite.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/authz-tests.yml"
+  push:
+    branches: ["main", "master", "claude/patient-onboarding-pwa-PFlAh"]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/authz-tests.yml"
+
+jobs:
+  pgtap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local database (applies all migrations from 0001)
+        run: supabase db start
+
+      - name: Run pgTAP authz suite
+        run: supabase test db

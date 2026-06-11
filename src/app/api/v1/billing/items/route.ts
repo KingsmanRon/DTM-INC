@@ -4,6 +4,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 import { StageBatchPayload } from "@/lib/validation/billing";
+import { isActiveHospital } from "@/lib/hospitals";
 import { monthInputToFirstDay } from "@/lib/billing/format";
 
 export const runtime = "nodejs";
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest) {
     if (!exportMonth) return jsonError(422, "invalid_month", "A valid month (YYYY-MM) is required.");
 
     const supabase = await getSupabaseServer();
+    // Hospitals are data (0044), not an enum — validate against the table.
+    if (!(await isActiveHospital(supabase, payload.hospital))) {
+      return jsonError(422, "invalid_hospital", "A valid hospital is required.");
+    }
 
     const { data: stagedCount, error } = await supabase.rpc("stage_billing_export_items", {
       p_actor_user_id: session.userId,

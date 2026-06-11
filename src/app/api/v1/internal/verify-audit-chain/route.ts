@@ -22,11 +22,21 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   if (auth !== `Bearer ${expected}`) return jsonError(401, "unauthorised");
 
-  const result = await verifyChain();
+  // Daily cron = incremental from the checkpoint (0049). ?full=true re-walks
+  // from genesis — run weekly/manually and after any suspected incident.
+  const full = req.nextUrl.searchParams.get("full") === "true";
+  const result = await verifyChain({ full });
   if (!result.ok) {
-    // Surface as a 500 so Vercel reports a failed invocation.
-    console.error("[audit-chain] BROKEN at", result.brokenAt);
+    // Surface as a 500 so Vercel reports a failed invocation. See
+    // docs/internal/audit-chain-runbook.md for what to do next.
+    console.error("[audit-chain] BROKEN at", result.brokenAt, { from_position: result.from_position });
     return jsonError(500, "audit_chain_broken", result.brokenAt);
   }
-  return jsonOk({ ok: true, checked_at: new Date().toISOString() });
+  return jsonOk({
+    ok: true,
+    mode: full ? "full" : "incremental",
+    checked: result.checked,
+    from_position: result.from_position,
+    checked_at: new Date().toISOString(),
+  });
 }

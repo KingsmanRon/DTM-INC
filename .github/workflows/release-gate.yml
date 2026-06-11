@@ -3,7 +3,10 @@ name: Release Gate
 on:
   pull_request:
   push:
-    branches: ["main", "master"]
+    # The de-facto production branch is claude/patient-onboarding-pwa-PFlAh
+    # (Vercel deploys it on push), so direct pushes there MUST run the gate.
+    # main/master kept for an eventual branch rename.
+    branches: ["main", "master", "claude/patient-onboarding-pwa-PFlAh"]
 
 jobs:
   quality-gate:
@@ -39,6 +42,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Canonical SQL functions match migrations
+        run: npm run check:functions
 
       - name: Test
         run: npm run test

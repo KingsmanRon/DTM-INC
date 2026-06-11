@@ -56,7 +56,11 @@ export async function POST(req: NextRequest) {
     }
     const newUserId = created.user.id;
 
-    // Insert the app_users row mirroring the auth user.
+    // Insert the app_users row mirroring the auth user. Status starts as
+    // pending_invite (the enum value existed unused since 0001): the user has
+    // been EMAILED, not onboarded. /auth/callback flips it to active on their
+    // first successful sign-in, so the admin Users screen tells the truth
+    // about who has actually taken up their account.
     const { error: insErr } = await admin
       .from("app_users")
       .insert({
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
         email: input.email,
         full_name: input.full_name,
         role_id: roleRow.id,
-        status: "active",
+        status: "pending_invite",
         created_by: session.userId,
         updated_by: session.userId,
       });

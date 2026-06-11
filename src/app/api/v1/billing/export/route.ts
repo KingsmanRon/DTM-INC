@@ -5,6 +5,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, parseJson } from "@/lib/api/http";
 import { GenerateExportPayload } from "@/lib/validation/billing";
+import { isActiveHospital } from "@/lib/hospitals";
 import { billingFilename, monthInputToFirstDay, monthLabel } from "@/lib/billing/format";
 import { buildBillingRows, type BillingItem } from "@/lib/billing/rows";
 import { buildXlsx } from "@/lib/billing/xlsx";
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
     const outgoingOverride = payload.outgoing_date && payload.outgoing_date !== "" ? payload.outgoing_date : null;
 
     const supabase = await getSupabaseServer();
+    // Hospitals are data (0044), not an enum — validate against the table.
+    if (!(await isActiveHospital(supabase, payload.hospital))) {
+      return jsonError(422, "invalid_hospital", "A valid hospital is required.");
+    }
     const { data: batch, error } = await supabase
       .from("billing_export_items")
       .select("id, patient_id, file_number, patient_name, id_number, medical_aid_number, payer_type, outgoing_date, returned_date")

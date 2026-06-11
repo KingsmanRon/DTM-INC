@@ -1,10 +1,20 @@
 import type { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { handleRouteError, jsonOk } from "@/lib/api/http";
+import { handleRouteError, jsonError, jsonOk } from "@/lib/api/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// POPIA minimality: the type-ahead list never ships the full identity number.
+// Reception confirms a caller off the last digits; the full number lives on the
+// patient profile. Keeps the dropdown — rendered on every keystroke, visible at
+// the front desk — low-value if shoulder-surfed.
+function maskIdNumber(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const tail = value.slice(-4);
+  return value.length <= 4 ? tail : `••••${tail}`;
+}
 
 // GET /api/v1/patients/search?q=<term>
 // Matches on file number, name (fuzzy), ID number, phone (last-7), medical aid number.
@@ -18,7 +28,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "10", 10) || 10));
 
-    if (q.length < 3 && !prefix) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false });
+    if (q.length < 3 && !prefix) return jsonOk({ data: [], page, pageSize, hasMore: false });
 
     const supabase = await getSupabaseServer();
     const digits = q.replace(/\D/g, "");
@@ -44,12 +54,16 @@ export async function GET(req: NextRequest) {
     // `active_patients` is a security_invoker view defined in migration 0004
     // — filters `archived_at IS NULL` in one place so we don't scatter that
     // predicate across the codebase (per review §active_patients).
+    //
+    // No count:"exact": an exact count makes Postgres do the full match-set's
+    // work for a number no consumer displays. Fetch pageSize+1 rows and derive
+    // hasMore from the overflow row instead.
     const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
+    const to = from + pageSize; // one extra row on purpose — see above
 
     let query = supabase
       .from("active_patients")
-      .select("id, file_number, title, first_names, surname, id_number, phone, payer_type, status, updated_at", { count: "exact" });
+      .select("id, file_number, title, first_names, surname, id_number, phone, payer_type, status, updated_at");
 
     if (q.length >= 3) query = query.or(conditions.join(","));
     if (prefix) query = query.ilike("file_number", `${prefix}-%`);
@@ -58,12 +72,21 @@ export async function GET(req: NextRequest) {
     else if (sort === "file_number_desc") query = query.order("file_number", { ascending: false });
     else query = query.order("updated_at", { ascending: false });
 
-    const { data, error, count } = await query.range(from, to);
+    const { data, error } = await query.range(from, to);
 
-    if (error) return jsonOk({ data: [], total: 0, page, pageSize, hasMore: false, error: error.message });
+    // A DB failure is a 500, not an empty result set — the previous behaviour
+    // (200 + an `error` field) made an outage indistinguishable from
+    // "no matches" in every consumer.
+    if (error) return jsonError(500, "db_error", error.message);
+
     void session;
-    const total = count ?? 0;
-    return jsonOk({ data: data ?? [], total, page, pageSize, hasMore: to + 1 < total });
+    const rows = data ?? [];
+    const hasMore = rows.length > pageSize;
+    const pageRows = (hasMore ? rows.slice(0, pageSize) : rows).map((r) => ({
+      ...r,
+      id_number: maskIdNumber(r.id_number as string | null),
+    }));
+    return jsonOk({ data: pageRows, page, pageSize, hasMore });
   } catch (err) {
     return handleRouteError(err);
   }

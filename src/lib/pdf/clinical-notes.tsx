@@ -7,13 +7,11 @@
 // the note is finalised (the PNG is only captured at finalisation — see
 // migration 0028).
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
-import fs from "node:fs";
-import path from "node:path";
 import React from "react";
 
-const LOGO_BUFFER = fs.readFileSync(
-  path.join(process.cwd(), "public", "brand", "Dr. T. Mtshali_LOGO - PDF.png"),
-);
+// The letterhead logo arrives as INPUT (input.logo) — resolved by
+// src/lib/pdf/logo.ts (practice-brand storage override -> bundled fallback)
+// in the route, never read at module load.
 
 const BRAND_DARK = "#1d4d3a";
 const BRAND_ACCENT = "#2d7d5e";
@@ -64,6 +62,7 @@ const styles = StyleSheet.create({
 });
 
 export type ClinicalNotesPdfInput = {
+  logo: Buffer;
   practice: {
     name: string; doctorName: string; qualifications: string;
     practiceNumber: string; address: string; phone: string;
@@ -82,7 +81,7 @@ export type ClinicalNotesPdfInput = {
 };
 
 export function ClinicalNotesPdfDoc(input: ClinicalNotesPdfInput) {
-  const { practice, fileNumber, patientName, notes, dateLabel } = input;
+  const { logo, practice, fileNumber, patientName, notes, dateLabel } = input;
   // Finalised handwriting (has a durable PNG) gets its own page; everything
   // else — typed notes and draft handwriting placeholders — flows on the lead.
   const flowNotes = notes.filter((n) => !n.inkPng);
@@ -93,7 +92,7 @@ export function ClinicalNotesPdfDoc(input: ClinicalNotesPdfInput) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header} fixed>
           {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image, not an HTML img */}
-          <Image src={{ data: LOGO_BUFFER, format: "png" }} style={styles.logo} />
+          <Image src={{ data: logo, format: "png" }} style={styles.logo} />
           <View style={styles.headerInfo}>
             <Text style={styles.doctorLine}>{practice.doctorName} — {practice.qualifications}</Text>
             <Text style={styles.practiceMeta}>{practice.address}</Text>
