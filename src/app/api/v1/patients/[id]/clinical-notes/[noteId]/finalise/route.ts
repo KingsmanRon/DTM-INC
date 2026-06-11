@@ -30,6 +30,11 @@ export async function POST(
       .maybeSingle();
     if (noteError) return jsonError(500, "db_error", noteError.message);
     if (!note) return jsonError(404, "not_found");
+    // Already finalised: report it instead of running the (0-row) update and
+    // writing a note_finalise audit row for a transition that never happened.
+    if (note.is_finalised) {
+      return jsonError(409, "already_finalised", "This note is already finalised.");
+    }
 
     const isInk = Boolean(note.encrypted_ink);
     if (isInk && !features.finaliseEnabled) {
@@ -88,15 +93,19 @@ export async function POST(
       }
     }
 
-    // .eq("is_finalised", false) keeps a double-submit a no-op (0 rows) rather
-    // than tripping the 0027 immutability guard.
-    const { error } = await supabase
+    // .eq("is_finalised", false) keeps a racing double-submit from tripping the
+    // 0027 immutability guard; .select() verifies a row actually transitioned so
+    // the audit row below is only written for a real finalisation.
+    const { data: finalised, error } = await supabase
       .from("clinical_notes")
       .update(update)
       .eq("id", noteId)
       .eq("patient_id", id)
-      .eq("is_finalised", false);
+      .eq("is_finalised", false)
+      .select("id")
+      .maybeSingle();
     if (error) return jsonError(500, "db_error", error.message);
+    if (!finalised) return jsonError(409, "already_finalised", "This note is already finalised.");
 
     await writeAudit({
       actorUserId: session.userId,

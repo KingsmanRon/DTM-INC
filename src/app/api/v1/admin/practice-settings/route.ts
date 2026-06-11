@@ -33,6 +33,18 @@ const Patch = z.object({
   file_number_format: z.string().optional(),
   active_consent_version: z.string().optional(),
   active_consent_body: z.string().optional(),
+  // Section G summary cards (0051) — presentation copy for the wizard,
+  // deliberately outside the hashed/versioned consent body.
+  consent_cards: z
+    .array(
+      z.object({
+        badge: z.string().min(1).max(3),
+        title: z.string().min(1).max(120),
+        body: z.string().min(1).max(2_000),
+      })
+    )
+    .max(10)
+    .optional(),
   information_officer_name: z.string().optional(),
   information_officer_email: z.string().email().optional(),
   privacy_notice_body: z.string().optional(),

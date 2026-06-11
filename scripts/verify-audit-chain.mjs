@@ -32,47 +32,51 @@ function compute(prev, row) {
   return h.digest("hex");
 }
 
+// This script is the deep manual tool: it ALWAYS walks the full chain from
+// genesis (the daily cron does the incremental, checkpointed walk). Walk order
+// is chain_position (migration 0048) — the chain's physical insertion order —
+// never created_at, which clock skew between writers can reorder.
 let prev = null;
-// Composite cursor (created_at, id). A scalar created_at cursor with `gt`
-// silently skips any subsequent row that shares the cursor's timestamp —
-// common at millisecond resolution and fatal for chain verification.
-let cursorCreatedAt = null;
-let cursorId = null;
+let cursorPosition = 0;
 let total = 0;
 
 while (true) {
-  let q = supabase
+  const { data, error } = await supabase
     .from("audit_logs").select("*")
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true })
+    .gt("chain_position", cursorPosition)
+    .order("chain_position", { ascending: true })
     .limit(500);
-  if (cursorCreatedAt && cursorId) {
-    q = q.or(
-      `created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`
-    );
-  }
-  const { data, error } = await q;
   if (error) { console.error("db error:", error.message); process.exit(3); }
   if (!data || data.length === 0) break;
   for (const row of data) {
-    const { id, entry_hash, chain_anchor_id, ...rest } = row;
-    void id; void chain_anchor_id;
-    // Postgres returns timestamptz as "…+00:00"; the writer hashed the JS
-    // toISOString() form ("…Z"). Canonicalise to the same instant string so
-    // the recomputed hash matches what was stored.
-    rest.created_at = new Date(rest.created_at).toISOString();
-    const expected = compute(prev, rest);
-    if (expected !== entry_hash) {
-      console.error(`CHAIN BROKEN at row ${row.id} (${row.created_at}) action=${row.action}`);
+    // chain_position, occurred_at and chain_anchor_id ride OUTSIDE the entry
+    // hash by design — hash exactly the writer's field set, nothing more.
+    const hashed = {
+      actor_user_id: row.actor_user_id,
+      actor_role: row.actor_role,
+      action: row.action,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id,
+      patient_id: row.patient_id,
+      metadata_json: row.metadata_json,
+      ip_address: row.ip_address,
+      user_agent: row.user_agent,
+      // Postgres returns timestamptz as "…+00:00"; the writer hashed the
+      // ISO "…Z" form. Canonicalise to the same instant string.
+      created_at: new Date(row.created_at).toISOString(),
+      prev_hash: row.prev_hash,
+    };
+    const expected = compute(prev, hashed);
+    if (expected !== row.entry_hash) {
+      console.error(`CHAIN BROKEN at row ${row.id} (position ${row.chain_position}, ${row.created_at}) action=${row.action}`);
       process.exit(1);
     }
-    prev = entry_hash;
-    cursorCreatedAt = row.created_at;
-    cursorId = row.id;
+    prev = row.entry_hash;
+    cursorPosition = row.chain_position;
     total++;
   }
   if (data.length < 500) break;
 }
 
-console.log(`OK · verified ${total} audit rows`);
+console.log(`OK · verified ${total} audit rows (full walk to position ${cursorPosition})`);
 process.exit(0);

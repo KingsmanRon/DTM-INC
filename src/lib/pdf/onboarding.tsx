@@ -3,16 +3,12 @@
 // reception can hand the PDF to the third-party claims processor
 // (§14 rule 10 — no integration; manual delivery).
 import { Document, Page, Text, View, Image, StyleSheet, Font, renderToBuffer } from "@react-pdf/renderer";
-import fs from "node:fs";
-import path from "node:path";
 import React from "react";
 
-// Branded letterhead logo. The PNG already contains the practice name and
-// "SPECIALIST LAPAROSCOPIC AND GENERAL SURGEON" tagline, so the header
-// avoids duplicating that text in the layout below.
-const LOGO_BUFFER = fs.readFileSync(
-  path.join(process.cwd(), "public", "brand", "Dr. T. Mtshali_LOGO - PDF.png"),
-);
+// The letterhead logo arrives as INPUT (input.logo) — resolved by
+// src/lib/pdf/logo.ts (practice-brand storage override -> bundled fallback)
+// in the route, never read at module load. The PNG typically contains the
+// practice name/tagline, so the header avoids duplicating that text.
 
 const BRAND_DARK = "#1d4d3a";
 const BRAND_ACCENT = "#2d7d5e";
@@ -56,6 +52,7 @@ const styles = StyleSheet.create({
 });
 
 export type OnboardingPdfInput = {
+  logo: Buffer;
   practice: {
     name: string; tagline: string; practiceNumber: string;
     doctorName: string; qualifications: string;
@@ -85,14 +82,14 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function OnboardingPdfDoc(input: OnboardingPdfInput) {
-  const { practice, fileNumber, patient, responsible, medicalAid, contacts, referral, dependants, consent } = input;
+  const { logo, practice, fileNumber, patient, responsible, medicalAid, contacts, referral, dependants, consent } = input;
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header} fixed>
           {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image, not an HTML img */}
-          <Image src={{ data: LOGO_BUFFER, format: "png" }} style={styles.logo} />
+          <Image src={{ data: logo, format: "png" }} style={styles.logo} />
           <View style={styles.headerInfo}>
             <Text style={styles.doctorLine}>{practice.doctorName} — {practice.qualifications}</Text>
             <Text style={styles.practiceMeta}>{practice.address}</Text>

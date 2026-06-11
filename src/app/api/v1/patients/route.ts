@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { OnboardingPayload, type OnboardingPayload as OnboardingPayloadType } from "@/lib/validation/patient";
+import { isActiveHospital } from "@/lib/hospitals";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 
@@ -67,18 +68,23 @@ export async function GET(req: NextRequest) {
     // Default to the active_patients view (migration 0004). Archived access
     // is a separate, deliberate code path for SAR lookups and goes through
     // the full patients table with an explicit archived filter.
+    //
+    // No count:"exact" — fetch limit+1 and derive hasMore from the overflow
+    // row instead of making Postgres count the whole table per page.
     const source = includeArchived ? "patients" : "active_patients";
     const q = supabase
       .from(source)
-      .select("id, file_number, title, first_names, surname, phone, payer_type, status, updated_at", { count: "exact" })
+      .select("id, file_number, title, first_names, surname, phone, payer_type, status, updated_at")
       .order("updated_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+      .range(offset, offset + limit); // one extra row on purpose
 
-    const { data, error, count } = await q;
+    const { data, error } = await q;
     if (error) return jsonError(500, "db_error", error.message);
 
     void session; // session is required but not needed in the payload
-    return jsonOk({ data, count, limit, offset });
+    const rows = data ?? [];
+    const hasMore = rows.length > limit;
+    return jsonOk({ data: hasMore ? rows.slice(0, limit) : rows, limit, offset, hasMore });
   } catch (err) {
     return handleRouteError(err);
   }
@@ -100,6 +106,12 @@ export async function POST(req: NextRequest) {
     // claimed hash doesn't match, the user signed stale text (e.g. admin
     // updated the consent body while the wizard was open). Reject.
     const supabase = await getSupabaseServer();
+
+    // Hospital is data, not an enum (0044): check the table here for a clean
+    // 422; onboard_patient hard-fails on unknown/inactive as the backstop.
+    if (!(await isActiveHospital(supabase, payload.section_a.hospital))) {
+      return jsonError(422, "invalid_hospital", "Please select a valid hospital.");
+    }
     const { data: settings, error: settingsErr } = await supabase
       .from("practice_settings")
       .select("active_consent_version, active_consent_body")

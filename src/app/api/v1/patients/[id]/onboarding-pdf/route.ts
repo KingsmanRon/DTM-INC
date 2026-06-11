@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { renderOnboardingPdf } from "@/lib/pdf/onboarding";
+import { getPdfLogoBuffer } from "@/lib/pdf/logo";
 import { getPatientBundle } from "@/lib/patients/bundle";
 import { clientIp, handleRouteError, jsonError } from "@/lib/api/http";
 
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const bundle = bundleRes.data;
 
     const pdf = await renderOnboardingPdf({
+      logo: await getPdfLogoBuffer(),
       practice: {
         name: p.practice_name, tagline: p.practice_tagline, practiceNumber: p.practice_number,
         doctorName: p.doctor_name, qualifications: p.doctor_qualifications,

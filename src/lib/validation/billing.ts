@@ -2,15 +2,11 @@
 // handlers (server) and could be reused client-side for pre-validation.
 import { z } from "zod";
 
-export const BillingHospital = z.enum(
-  [
-    "Nkanyezi Private Hospital",
-    "Fountain Private Hospital",
-    "Mediclinic Vereeniging Hospital",
-    "Midvaal Private Hospital",
-  ],
-  { errorMap: () => ({ message: "Please select a valid hospital." }) },
-);
+// Plain string at the schema layer: the allowed hospitals live in
+// public.hospitals (migration 0044) and differ per practice. Every billing
+// route validates the value against the table (isActiveHospital) and the
+// stage RPC + FK constraints are the backstop.
+export const BillingHospital = z.string().min(1, "Please select a valid hospital.");
 
 // <input type="month"> value, e.g. "2026-06".
 export const BillingMonth = z

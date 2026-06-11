@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { Buffer } from "node:buffer";
 import { requireRole } from "@/lib/auth/session";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import {
   encryptNoteBody, unwrapDek, zero, KeyManagementUnavailableError,
@@ -47,9 +47,14 @@ export async function POST(
     const { id, noteId } = await params;
     const input = await parseJson(req, NoteAmend);
 
+    // RLS client for everything that touches clinical_notes (review #9): the
+    // doctor-only policy + author trigger stay in the path. ONLY the wrapped-
+    // DEK fetch uses the admin client (patient_encryption_keys is readable to
+    // doctors but managed via service role; mirrors the create path).
+    const rls = await getSupabaseServer();
     const admin = getSupabaseAdmin();
 
-    const { data: source, error: sourceErr } = await admin
+    const { data: source, error: sourceErr } = await rls
       .from("clinical_notes")
       .select("id, patient_id, dek_id, is_finalised, encrypted_ink")
       .eq("id", noteId)
@@ -63,7 +68,7 @@ export async function POST(
       return jsonError(409, "handwritten_not_amendable", "Handwritten notes cannot be amended.");
     }
 
-    const { data: alreadyAmended } = await admin
+    const { data: alreadyAmended } = await rls
       .from("clinical_notes")
       .select("id")
       .eq("amended_from_note_id", noteId)
@@ -97,7 +102,7 @@ export async function POST(
 
       // Auto-finalise a still-draft source so the chain has a single head.
       if (!source.is_finalised) {
-        const { error: finErr } = await admin
+        const { error: finErr } = await rls
           .from("clinical_notes")
           .update({ is_finalised: true, finalised_at: new Date().toISOString() })
           .eq("id", noteId)
@@ -105,7 +110,7 @@ export async function POST(
         if (finErr) return jsonError(500, "db_error", finErr.message);
       }
 
-      const { data: inserted, error: insErr } = await admin
+      const { data: inserted, error: insErr } = await rls
         .from("clinical_notes")
         .insert({
           patient_id: id,

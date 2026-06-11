@@ -104,9 +104,14 @@ export const config = {
   // cannot set cookies, so middleware remains the place that refreshes the
   // browser session on navigation. The /api/* branches above are retained as
   // defensive behaviour in case this matcher is ever broadened again.
+  // KEEP IN SYNC with src/app/(authed)/* — every page group under (authed)
+  // must be listed here or it silently misses session-cookie refresh (auth
+  // still holds via the layout's resolveSession, but token rotation only
+  // happens where middleware runs). /billing was missed when it shipped.
   matcher: [
     "/dashboard/:path*",
     "/patients/:path*",
+    "/billing/:path*",
     "/admin/:path*",
     "/mfa/:path*",
   ],

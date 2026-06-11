@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { handleRouteError, jsonError, jsonOk } from "@/lib/api/http";
 import { BillingHospital, BillingMonth } from "@/lib/validation/billing";
+import { isActiveHospital } from "@/lib/hospitals";
 import { monthInputToFirstDay, monthLabel } from "@/lib/billing/format";
 
 export const runtime = "nodejs";
@@ -29,6 +30,10 @@ export async function GET(req: NextRequest) {
     if (!exportMonth) return jsonError(422, "invalid_month", "A valid month (YYYY-MM) is required.");
 
     const supabase = await getSupabaseServer();
+    // Hospitals are data (0044), not an enum — validate against the table.
+    if (!(await isActiveHospital(supabase, hospital))) {
+      return jsonError(422, "invalid_hospital", "A valid hospital is required.");
+    }
     const { data: batch, error } = await supabase
       .from("billing_export_items")
       .select(
