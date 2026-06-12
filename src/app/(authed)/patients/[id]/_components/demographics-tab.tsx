@@ -326,8 +326,8 @@ export function DemographicsTab({ patientId, initialData, hospitals }: { patient
 // Administrative correction for a patient filed under the WRONG hospital
 // (0053): allocates a NEW file number under the correct prefix, retires the
 // old one (still searchable), and removes never-exported billing rows from the
-// wrong hospital's batch. Deliberately heavy on confirmation — the file number
-// on the physical folder changes.
+// wrong hospital's batch. The retiring file number is shown read-only; the
+// gate is choosing the hospital plus an audited reason.
 function ReassignHospitalCard({
   patientId,
   currentHospital,
@@ -342,14 +342,12 @@ function ReassignHospitalCard({
   const [open, setOpen] = useState(false);
   const [newHospital, setNewHospital] = useState("");
   const [reason, setReason] = useState("");
-  const [confirmNumber, setConfirmNumber] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ new_file_number: string; new_hospital: string; removed_pending_billing: number } | null>(null);
 
   const otherHospitals = hospitals.filter((h) => h.name !== currentHospital);
   const reasonTooShort = reason.trim().length < 10;
-  const confirmed = confirmNumber.trim() === currentFileNumber;
 
   async function submit() {
     setBusy(true);
@@ -430,15 +428,9 @@ function ReassignHospitalCard({
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-text-secondary">
-                Type the current file number to confirm ({currentFileNumber})
+                Current file number (will be retired)
               </span>
-              <input
-                className="input font-mono"
-                value={confirmNumber}
-                onChange={(e) => setConfirmNumber(e.target.value)}
-                placeholder={currentFileNumber}
-                disabled={busy}
-              />
+              <input className="input font-mono" value={currentFileNumber} readOnly />
             </label>
           </div>
           <label className="block">
@@ -459,7 +451,7 @@ function ReassignHospitalCard({
           <div className="flex gap-2">
             <button
               className="btn-primary"
-              disabled={busy || !newHospital || reasonTooShort || !confirmed}
+              disabled={busy || !newHospital || reasonTooShort}
               onClick={submit}
             >
               {busy ? "Reassigning…" : "Reassign and issue new file number"}
