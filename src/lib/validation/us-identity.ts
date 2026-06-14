@@ -51,12 +51,16 @@ export const UsPatientIdentity = z.object({
 });
 export type UsPatientIdentity = z.infer<typeof UsPatientIdentity>;
 
-// Canonical dedupe key for US patients. With no national ID, identity collisions
-// (retries, double-submits, the same patient onboarded twice) are detected on
-// normalized name + DOB, plus SSN last-4 when present. This is the app-side
-// normaliser; a later migration adds a matching unique index so the database
-// enforces it too — both layers MUST agree on this normalisation, exactly as
-// sa-id + migration 0031 agree for SA.
+// SOFT duplicate-match key for US patients. With no national ID, likely-the-same
+// patient (retries, double-submits, re-registration) is detected on normalized
+// name + DOB, plus SSN last-4 when present.
+//
+// IMPORTANT: this is a WARN key, NOT a uniqueness rule. Unlike an SA national ID
+// (unique → hard unique index, migration 0031), name + DOB is genuinely NOT
+// unique — distinct real people share them — so a hard constraint would block
+// registering a legitimate second patient. The DB therefore has only a
+// NON-UNIQUE lookup index (migration 0055); the app uses this key to surface
+// possible matches for the user to confirm or override.
 export function usIdentityDedupeKey(identity: {
   first_names: string;
   surname: string;
