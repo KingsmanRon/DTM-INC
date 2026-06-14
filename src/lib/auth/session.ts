@@ -16,6 +16,7 @@ import { writeAudit } from "@/lib/audit/log";
 import {
   APP_PROFILE_QUERY_DESCRIPTION,
   APP_PROFILE_SELECT,
+  apiMfaSatisfied,
   getProfileFailureReason,
   profileFromQueryRow,
   sessionFromProfile,
@@ -26,7 +27,7 @@ import {
 export type { AppRole, Session } from "@/lib/auth/profile";
 
 export class AuthError extends Error {
-  constructor(public readonly code: "unauthenticated" | "forbidden") {
+  constructor(public readonly code: "unauthenticated" | "forbidden" | "mfa_required") {
     super(code);
   }
 }
@@ -49,6 +50,22 @@ export const getVerifiedUser = cache(async (): Promise<User | null> => {
     return null;
   }
   return user ?? null;
+});
+
+// Current authenticator assurance level (aal1 | aal2 | null) for the request.
+// getAuthenticatorAssuranceLevel() is a LOCAL decode of the session JWT's `aal`
+// claim — no /auth/v1/user round-trip. The claim is trustworthy here because
+// requireSession() has already run getVerifiedUser() (getUser) to verify the
+// token against Supabase Auth, so a forged cookie never reaches this point.
+// cache()d so repeated requireRole calls in one request decode once.
+export const getAssuranceLevel = cache(async (): Promise<string | null> => {
+  const supabase = await getSupabaseServer();
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error) {
+    console.error("[auth] AAL lookup failed", { message: error.message });
+    return null;
+  }
+  return data?.currentLevel ?? null;
 });
 
 export const resolveSession = cache(async (): Promise<Session | null> => {
@@ -136,14 +153,47 @@ export async function requireRole(roles: AppRole | AppRole[]): Promise<Session> 
     });
     throw new AuthError("forbidden");
   }
+
+  // Step-up (FR-1) at the API layer: a caller who HAS the role but hasn't
+  // reached AAL2 (doctor/admin) is refused here, mirroring resolveMfa for the
+  // pages. The role is already proven, so there is nothing to hide — return a
+  // distinct 403 mfa_required (not the 404 used for role denials) so the SPA
+  // can redirect to /mfa/challenge. Audited so AAL1 API probes are observable.
+  if (!apiMfaSatisfied(s.role, await getAssuranceLevel())) {
+    const h = await headers();
+    await writeAudit({
+      actorUserId: s.userId,
+      actorRole: s.role,
+      action: "access_denied",
+      entityType: null,
+      entityId: null,
+      patientId: null,
+      metadata: {
+        reason: "mfa_required",
+        actual_role: s.role,
+        path: h.get("x-invoke-path") ?? h.get("referer") ?? null,
+      },
+      ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: h.get("user-agent"),
+    });
+    throw new AuthError("mfa_required");
+  }
+
   return s;
 }
 
 // Maps AuthError to HTTP responses per FR-2: 404 on forbidden to avoid
-// leaking the existence of restricted resources.
+// leaking the existence of restricted resources. mfa_required is a deliberate
+// exception — the caller has the role, so a 403 (not 404) lets the client
+// step up to AAL2 rather than seeing a misleading not-found.
 export function authErrorResponse(err: unknown): NextResponse {
   if (err instanceof AuthError) {
     if (err.code === "unauthenticated") return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    if (err.code === "mfa_required")
+      return NextResponse.json(
+        { error: "mfa_required", message: "Multi-factor authentication required. Please complete the MFA challenge." },
+        { status: 403 }
+      );
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   throw err;
