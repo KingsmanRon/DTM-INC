@@ -19,7 +19,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(19);
+select plan(23);
 
 -- ── Fixtures (as superuser; RLS bypassed by table ownership) ────────────────
 
@@ -279,6 +279,81 @@ select is(
   1,
   'the retired number is poison-pilled in file_number_reservations (never reissued)'
 );
+
+-- ── 20-23: US locale onboarding (0056/0057/0058) ─────────────────────────────
+-- Run last because they flip practice_settings.locale to 'us' (rolled back with
+-- the surrounding transaction). Identity rules are read from that trusted value,
+-- never the payload.
+
+reset role;
+select pg_temp.impersonate('22222222-2222-2222-2222-222222222222');
+
+-- 20: with the default 'za' locale, a US-shaped payload (id_type 'none') is
+--     refused by the SA identity rules.
+select throws_like(
+  $$ select * from public.onboard_patient(
+       '22222222-2222-2222-2222-222222222222',
+       '{"hospital":"Fountain Private Hospital","title":"Mr","first_names":"Za","surname":"NoneRejected","id_type":"none","date_of_birth":"1990-05-20","phone":"+27110000010","address":"10 Street"}'::jsonb,
+       '{"title":"Mr","first_names":"Za","surname":"NoneRejected","phone":"+27110000010","home_address":"10 Street"}'::jsonb,
+       '{"is_private_payer":true}'::jsonb,
+       '{"name":"N","relationship":"R","phone":"+27110000011"}'::jsonb,
+       '{"referrer_type":"self"}'::jsonb,
+       '[]'::jsonb,
+       '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"Za","patient_present_attestation":"true"}'::jsonb
+     ) $$,
+  '%Adults must use SA ID or passport%',
+  'za locale rejects id_type none (SA identity rules still apply)'
+);
+
+reset role;
+update public.practice_settings set locale = 'us' where id = 1;
+select pg_temp.impersonate('22222222-2222-2222-2222-222222222222');
+
+-- 21: US onboarding succeeds with name + DOB and no national ID.
+select like(
+  (select file_number from public.onboard_patient(
+     '22222222-2222-2222-2222-222222222222',
+     '{"hospital":"Fountain Private Hospital","title":"Mr","first_names":"Us","surname":"Liberty","id_type":"none","date_of_birth":"1990-05-20","ssn_last4":"1234","phone":"+27110000012","address":"12 Street"}'::jsonb,
+     '{"title":"Mr","first_names":"Us","surname":"Liberty","phone":"+27110000012","home_address":"12 Street"}'::jsonb,
+     '{"is_private_payer":true}'::jsonb,
+     '{"name":"N","relationship":"R","phone":"+27110000013"}'::jsonb,
+     '{"referrer_type":"self"}'::jsonb,
+     '[]'::jsonb,
+     '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"Us Liberty","patient_present_attestation":"true"}'::jsonb
+   )),
+  'FOU-%',
+  'us locale: onboarding succeeds with name + DOB, no national ID'
+);
+
+-- 22: the US patient row stores DOB + ssn_last4 and no national id_number.
+select is(
+  (select count(*)::int from public.patients
+     where surname = 'Liberty'
+       and id_type::text = 'none'
+       and id_number is null
+       and date_of_birth = date '1990-05-20'
+       and ssn_last4 = '1234'),
+  1,
+  'us patient row: id_type none, no id_number, DOB + ssn_last4 stored'
+);
+
+-- 23: under the US locale an SA-shaped payload (id_type 'sa_id') is refused.
+select throws_like(
+  $$ select * from public.onboard_patient(
+       '22222222-2222-2222-2222-222222222222',
+       '{"hospital":"Fountain Private Hospital","title":"Mr","first_names":"Us","surname":"SaRejected","id_type":"sa_id","id_number":"8001015009087","phone":"+27110000014","address":"14 Street"}'::jsonb,
+       '{"title":"Mr","first_names":"Us","surname":"SaRejected","phone":"+27110000014","home_address":"14 Street"}'::jsonb,
+       '{"is_private_payer":true}'::jsonb,
+       '{"name":"N","relationship":"R","phone":"+27110000015"}'::jsonb,
+       '{"referrer_type":"self"}'::jsonb,
+       '[]'::jsonb,
+       '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"Us SaRejected","patient_present_attestation":"true"}'::jsonb
+     ) $$,
+  '%id type "none"%',
+  'us locale rejects an SA id_type (must be none)'
+);
+
+reset role;
 
 select * from finish();
 rollback;
