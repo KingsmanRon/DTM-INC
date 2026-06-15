@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { dobFromSaId, isValidSaId } from "@/lib/validation/sa-id";
 import {
   DependantSchema,
-  OnboardingPayload,
   SectionA,
   SectionB,
   SectionC,
@@ -13,6 +12,8 @@ import {
   SectionE,
   TitleEnum,
 } from "@/lib/validation/patient";
+import { UsSectionA, UsSectionB, onboardingPayloadForLocale } from "@/lib/validation/onboarding-us";
+import type { PracticeLocale } from "@/lib/practice/locale";
 
 export type ConsentCard = { badge: string; title: string; body: string };
 export type HospitalOption = { name: string; file_prefix: string };
@@ -24,9 +25,13 @@ type Draft = {
     title: string;
     first_names: string;
     surname: string;
-    id_type: "sa_id" | "passport" | "none_minor";
+    id_type: "sa_id" | "passport" | "none_minor" | "none";
     id_number: string;
     id_country?: string;
+    // US (locale "us") identity: no national ID — DOB is the anchor, SSN last-4
+    // optional. Empty strings for SA patients.
+    date_of_birth: string;
+    ssn_last4: string;
     email: string;
     phone: string;
     address: string;
@@ -88,6 +93,8 @@ const emptyDraft: Draft = {
     surname: "",
     id_type: "sa_id",
     id_number: "",
+    date_of_birth: "",
+    ssn_last4: "",
     email: "",
     phone: "+27",
     address: "",
@@ -124,6 +131,23 @@ const emptyDraft: Draft = {
   dependants: [],
   consent: { signature_type: "typed_name", signature_value: "", patient_present_attestation: false },
 };
+
+// A fresh draft seeded for the practice's locale: US prefills a +1 phone and
+// fixes id_type to 'none' (no national ID); SA keeps the +27 / sa_id defaults.
+function initialDraft(locale: PracticeLocale, hospital: string): Draft {
+  const phone = locale === "us" ? "+1" : "+27";
+  return {
+    ...emptyDraft,
+    section_a: {
+      ...emptyDraft.section_a,
+      hospital,
+      phone,
+      id_type: locale === "us" ? "none" : "sa_id",
+    },
+    section_b: { ...emptyDraft.section_b, phone },
+    section_d: { ...emptyDraft.section_d, phone },
+  };
+}
 
 const STEPS = [
   "A — Patient",
@@ -203,6 +227,7 @@ function zodIssues(result: { success: boolean; error?: { issues: Array<{ path: A
 }
 
 export function OnboardingWizard(props: {
+  locale: PracticeLocale;
   consentVersion: string;
   consentBody: string;
   privacyNotice: string;
@@ -210,11 +235,9 @@ export function OnboardingWizard(props: {
   hospitals: HospitalOption[];
 }) {
   const router = useRouter();
+  const isUs = props.locale === "us";
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Draft>(() => ({
-    ...emptyDraft,
-    section_a: { ...emptyDraft.section_a, hospital: props.hospitals[0]?.name ?? "" },
-  }));
+  const [draft, setDraft] = useState<Draft>(() => initialDraft(props.locale, props.hospitals[0]?.name ?? ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
@@ -259,10 +282,7 @@ export function OnboardingWizard(props: {
 
   function startOver() {
     clearStoredDraft();
-    setDraft({
-      ...emptyDraft,
-      section_a: { ...emptyDraft.section_a, hospital: props.hospitals[0]?.name ?? "" },
-    });
+    setDraft(initialDraft(props.locale, props.hospitals[0]?.name ?? ""));
     setStep(0);
     setStepErrors([]);
     setIssues([]);
@@ -283,8 +303,9 @@ export function OnboardingWizard(props: {
           first_names: a.first_names,
           surname: a.surname,
           id_number: a.id_number,
-          date_of_birth:
-            a.id_type === "sa_id"
+          date_of_birth: isUs
+            ? (a.date_of_birth || d.section_b.date_of_birth)
+            : a.id_type === "sa_id"
               ? (dobFromSaId(a.id_number) ?? d.section_b.date_of_birth)
               : d.section_b.date_of_birth,
           email: a.email,
@@ -310,28 +331,30 @@ export function OnboardingWizard(props: {
   }
 
   const saIdError = useMemo(() => {
+    if (isUs) return null;
     const v = draft.section_a;
     if (v.id_type === "sa_id" && v.id_number && !isValidSaId(v.id_number)) return "SA ID checksum failed.";
     return null;
-  }, [draft.section_a]);
+  }, [draft.section_a, isUs]);
 
   // Guardian ID gets the same checksum scrutiny as the patient's — but as a
   // WARNING only: Section B has no id_type field, so a passport number that
   // happens to be 13 digits must not hard-block the form.
   const bIdWarning = useMemo(() => {
+    if (isUs) return null;
     const idNumber = draft.section_b.id_number.trim();
     if (/^\d{13}$/.test(idNumber) && !isValidSaId(idNumber)) {
       return "This looks like an SA ID number but its checksum fails — double-check before continuing.";
     }
     return null;
-  }, [draft.section_b.id_number]);
+  }, [draft.section_b.id_number, isUs]);
 
   // Per-step validation (review #20): the SAME zod schemas the server enforces,
   // run when the user clicks Next — so a Section A typo surfaces on Section A,
   // not as a rejected submit after all seven steps.
   const stepValidators: Array<(d: Draft) => string[]> = [
-    (d) => zodIssues(SectionA.safeParse(d.section_a)),
-    (d) => zodIssues(SectionB.safeParse(d.section_b)),
+    (d) => zodIssues((isUs ? UsSectionA : SectionA).safeParse(d.section_a)),
+    (d) => zodIssues((isUs ? UsSectionB : SectionB).safeParse(d.section_b)),
     (d) => zodIssues(SectionC.safeParse(d.section_c)),
     (d) => zodIssues(SectionD.safeParse(d.section_d)),
     (d) => zodIssues(SectionE.safeParse(d.section_e)),
@@ -394,10 +417,10 @@ export function OnboardingWizard(props: {
         },
       };
 
-      // Full client-side validation BEFORE the network: same schema the server
-      // runs, including the minor/guardian cross-section rules. On failure,
-      // jump to the earliest offending section with its errors shown.
-      const parsed = OnboardingPayload.safeParse(payload);
+      // Full client-side validation BEFORE the network: the SAME locale schema
+      // the server runs (SA national-ID rules vs US name+DOB). On failure, jump
+      // to the earliest offending section with its errors shown.
+      const parsed = onboardingPayloadForLocale(props.locale).safeParse(payload);
       if (!parsed.success) {
         const allIssues = parsed.error.issues;
         const firstStep = Math.min(...allIssues.map((i) => stepForPath(i.path)));
@@ -503,7 +526,7 @@ export function OnboardingWizard(props: {
           <>
             <h2 className="section-title">A — Patient details</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Hospital" required>
+              <Field label={isUs ? "Clinic / Facility" : "Hospital"} required>
                 <select
                   className="input"
                   value={A.hospital}
@@ -532,13 +555,17 @@ export function OnboardingWizard(props: {
                       const isMinor = e.target.checked;
                       setDraft({
                         ...draft,
-                        section_a: {
-                          ...A,
-                          is_minor: isMinor,
-                          id_type: isMinor ? "none_minor" : A.id_type === "none_minor" ? "sa_id" : A.id_type,
-                          id_number: isMinor && A.id_type !== "none_minor" ? "" : A.id_number,
-                          id_country: isMinor ? undefined : A.id_country,
-                        },
+                        // US identity is name+DOB regardless of age (id_type stays
+                        // 'none'); only the SA flow flips id_type for minors.
+                        section_a: isUs
+                          ? { ...A, is_minor: isMinor }
+                          : {
+                              ...A,
+                              is_minor: isMinor,
+                              id_type: isMinor ? "none_minor" : A.id_type === "none_minor" ? "sa_id" : A.id_type,
+                              id_number: isMinor && A.id_type !== "none_minor" ? "" : A.id_number,
+                              id_country: isMinor ? undefined : A.id_country,
+                            },
                         section_b: { ...B, same_as_patient: isMinor ? false : B.same_as_patient },
                       });
                     }}
@@ -547,26 +574,30 @@ export function OnboardingWizard(props: {
                 </label>
               </Field>
 
-              <Field label="ID type">
-                <select
-                  className="input"
-                  value={A.id_type}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "none_minor" },
-                    })
-                  }
-                >
-                  <option value="sa_id">SA ID</option>
-                  <option value="passport">Passport</option>
-                  {A.is_minor && <option value="none_minor">No ID yet (minor)</option>}
-                </select>
-              </Field>
+              {!isUs && (
+                <Field label="ID type">
+                  <select
+                    className="input"
+                    value={A.id_type}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        section_a: { ...A, id_type: e.target.value as "sa_id" | "passport" | "none_minor" },
+                      })
+                    }
+                  >
+                    <option value="sa_id">SA ID</option>
+                    <option value="passport">Passport</option>
+                    {A.is_minor && <option value="none_minor">No ID yet (minor)</option>}
+                  </select>
+                </Field>
+              )}
 
               {A.is_minor && (
                 <p className="col-span-2 text-xs text-text-secondary">
-                  For minors without an SA ID or passport, choose “No ID yet (minor)”. Section B must contain the guardian or responsible party’s identity details.
+                  {isUs
+                    ? "For a minor, Section B must contain the guardian / responsible party’s details."
+                    : "For minors without an SA ID or passport, choose “No ID yet (minor)”. Section B must contain the guardian or responsible party’s identity details."}
                 </p>
               )}
 
@@ -578,13 +609,40 @@ export function OnboardingWizard(props: {
                 <input className="input" value={A.surname} onChange={(e) => setDraft({ ...draft, section_a: { ...A, surname: e.target.value } })} />
               </Field>
 
-              <Field
-                label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "Minor identifier / note"}
-                required={A.id_type !== "none_minor"}
-                error={saIdError ?? undefined}
-              >
-                <input className="input font-mono" value={A.id_number} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_number: e.target.value } })} />
-              </Field>
+              {!isUs && (
+                <Field
+                  label={A.id_type === "sa_id" ? "SA ID number" : A.id_type === "passport" ? "Passport number" : "Minor identifier / note"}
+                  required={A.id_type !== "none_minor"}
+                  error={saIdError ?? undefined}
+                >
+                  <input className="input font-mono" value={A.id_number} onChange={(e) => setDraft({ ...draft, section_a: { ...A, id_number: e.target.value } })} />
+                </Field>
+              )}
+
+              {isUs && (
+                <>
+                  <Field label="Date of birth" required>
+                    <input
+                      type="date"
+                      className="input"
+                      value={A.date_of_birth}
+                      onChange={(e) => setDraft({ ...draft, section_a: { ...A, date_of_birth: e.target.value } })}
+                    />
+                  </Field>
+                  <Field label="SSN — last 4 (optional)">
+                    <input
+                      className="input font-mono"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={A.ssn_last4}
+                      onChange={(e) =>
+                        setDraft({ ...draft, section_a: { ...A, ssn_last4: e.target.value.replace(/\D/g, "").slice(0, 4) } })
+                      }
+                    />
+                  </Field>
+                </>
+              )}
 
               {A.id_type === "passport" && (
                 <Field label="Country (ISO-2)" required>
@@ -638,14 +696,16 @@ export function OnboardingWizard(props: {
               <Field label="Surname" required>
                 <input className="input" value={B.surname} onChange={(e) => setDraft({ ...draft, section_b: { ...B, surname: e.target.value } })} />
               </Field>
-              <Field label="ID number" required error={undefined}>
-                <input className="input" value={B.id_number} onChange={(e) => setDraft({ ...draft, section_b: { ...B, id_number: e.target.value } })} />
-                {bIdWarning ? <p className="text-state-warning text-xs mt-1">{bIdWarning}</p> : null}
-              </Field>
-              <Field label="Date of birth" required>
+              {!isUs && (
+                <Field label="ID number" required error={undefined}>
+                  <input className="input" value={B.id_number} onChange={(e) => setDraft({ ...draft, section_b: { ...B, id_number: e.target.value } })} />
+                  {bIdWarning ? <p className="text-state-warning text-xs mt-1">{bIdWarning}</p> : null}
+                </Field>
+              )}
+              <Field label="Date of birth" required={!isUs}>
                 <input type="date" className="input" value={B.date_of_birth} onChange={(e) => setDraft({ ...draft, section_b: { ...B, date_of_birth: e.target.value } })} />
               </Field>
-              <Field label="Marital status" required>
+              <Field label="Marital status" required={!isUs}>
                 <select className="input" value={B.marital_status} onChange={(e) => setDraft({ ...draft, section_b: { ...B, marital_status: e.target.value } })}>
                   <option value="single">Single</option>
                   <option value="married">Married</option>

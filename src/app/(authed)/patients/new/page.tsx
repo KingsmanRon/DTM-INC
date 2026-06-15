@@ -2,6 +2,7 @@ import { resolveSession } from "@/lib/auth/session";
 import { getPracticeSettings } from "@/lib/practice/settings";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getActiveHospitals } from "@/lib/hospitals";
+import { practiceLocaleFrom } from "@/lib/practice/locale";
 import { redirect } from "next/navigation";
 import { OnboardingWizard, type ConsentCard } from "./_components/onboarding-wizard";
 
@@ -21,6 +22,7 @@ export default async function NewPatientPage() {
     active_consent_body?: string | null;
     privacy_notice_body?: string | null;
     consent_cards?: ConsentCard[] | null;
+    locale?: string | null;
   };
   const settings = (await getPracticeSettings()) as ConsentSettings | null;
 
@@ -39,6 +41,7 @@ export default async function NewPatientPage() {
       </p>
 
       <OnboardingWizard
+        locale={practiceLocaleFrom(settings.locale)}
         consentVersion={settings.active_consent_version ?? ""}
         consentBody={settings.active_consent_body ?? ""}
         privacyNotice={settings.privacy_notice_body ?? ""}
