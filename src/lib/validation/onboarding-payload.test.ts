@@ -4,6 +4,7 @@
 // change that breaks a normal front-desk fill should fail CI, not reception).
 import { describe, expect, it } from "vitest";
 import { OnboardingPayload } from "./patient";
+import { OnboardingPayloadUs, onboardingPayloadForLocale } from "./onboarding-us";
 
 const typicalAdultPayload = {
   section_a: {
@@ -88,5 +89,79 @@ describe("incident repro: wizard payload vs OnboardingPayload", () => {
       section_d: { ...typicalAdultPayload.section_d, phone: "+27" },
     });
     expect(r.success).toBe(false);
+  });
+});
+
+const typicalUsAdultPayload = {
+  section_a: {
+    hospital: "Downtown Clinic",
+    is_minor: false,
+    title: "Mr",
+    first_names: "John",
+    surname: "Liberty",
+    id_type: "none",
+    date_of_birth: "1985-07-21",
+    ssn_last4: "1234",
+    email: "",
+    phone: "+12025550147",
+    address: "100 Main St, Austin TX",
+  },
+  section_b: {
+    same_as_patient: true,
+    title: "Mr",
+    first_names: "John",
+    surname: "Liberty",
+    email: "",
+    phone: "+12025550147",
+    home_address: "100 Main St, Austin TX",
+  },
+  section_c: {
+    same_as_responsible: false,
+    main_member_name: "",
+    medical_aid_name: "",
+    membership_number: "",
+    plan: "",
+    other_plan_detail: "",
+    is_private_payer: true,
+  },
+  section_d: { name: "Jane Liberty", relationship: "Spouse", address: "", email: "", phone: "+12025550148" },
+  section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "", referral_notes: "" },
+  dependants: [],
+  consent: {
+    consent_text_version: "1.0.0",
+    consent_text_hash: "a".repeat(64),
+    consent_summary_version: "cards-v1",
+    signature_type: "typed_name",
+    signature_value: "John Liberty",
+    patient_present_attestation: true,
+  },
+};
+
+describe("US onboarding schema (locale 'us')", () => {
+  it("typical US adult payload (name + DOB, no national ID) passes", () => {
+    const r = OnboardingPayloadUs.safeParse(typicalUsAdultPayload);
+    if (!r.success) console.error(JSON.stringify(r.error.issues, null, 2));
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a US payload missing date_of_birth (the identity anchor)", () => {
+    const { date_of_birth, ...sectionANoDob } = typicalUsAdultPayload.section_a;
+    void date_of_birth;
+    const r = OnboardingPayloadUs.safeParse({ ...typicalUsAdultPayload, section_a: sectionANoDob });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects an SSN last-4 that is not 4 digits", () => {
+    const r = OnboardingPayloadUs.safeParse({
+      ...typicalUsAdultPayload,
+      section_a: { ...typicalUsAdultPayload.section_a, ssn_last4: "12" },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("onboardingPayloadForLocale routes by locale: us accepts, za (SA) rejects the US shape", () => {
+    expect(onboardingPayloadForLocale("us").safeParse(typicalUsAdultPayload).success).toBe(true);
+    // The SA schema requires sa_id/passport + id_number, so a US-shaped payload fails it.
+    expect(onboardingPayloadForLocale("za").safeParse(typicalUsAdultPayload).success).toBe(false);
   });
 });

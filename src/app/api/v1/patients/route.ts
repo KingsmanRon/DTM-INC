@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
-import { OnboardingPayload, type OnboardingPayload as OnboardingPayloadType } from "@/lib/validation/patient";
+import type { OnboardingPayload as OnboardingPayloadType } from "@/lib/validation/patient";
+import { onboardingPayloadForLocale } from "@/lib/validation/onboarding-us";
+import { practiceLocaleFrom } from "@/lib/practice/locale";
 import { isActiveHospital } from "@/lib/hospitals";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
@@ -97,54 +99,65 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole(["doctor", "staff"]);
-    const parsedPayload = (await parseJson(req, OnboardingPayload)) as OnboardingPayloadType;
-    const payload = normalizeOnboardingPayload(parsedPayload);
-    const { consent } = payload;
-
-    // Consent verification — re-derive the hash server-side from the
-    // currently-active consent body in practice_settings. If the client's
-    // claimed hash doesn't match, the user signed stale text (e.g. admin
-    // updated the consent body while the wizard was open). Reject.
     const supabase = await getSupabaseServer();
+
+    // Read practice settings up front: `locale` selects the onboarding schema
+    // (SA national-ID rules vs US name + DOB), and the consent fields verify the
+    // captured signature below.
+    const { data: settings, error: settingsErr } = await supabase
+      .from("practice_settings")
+      .select("locale, active_consent_version, active_consent_body")
+      .eq("id", 1)
+      .single();
+    if (settingsErr || !settings) {
+      return jsonError(500, "consent_settings_unavailable", settingsErr?.message);
+    }
+    const locale = practiceLocaleFrom(settings.locale);
+
+    const parsed = await parseJson(req, onboardingPayloadForLocale(locale));
+    // SA normalises id_number casing; US has no national ID to normalise. The
+    // cast is type-only — the runtime object keeps its locale-specific fields
+    // (date_of_birth/ssn_last4 for US), which flow through to onboard_patient.
+    const payload = (
+      locale === "za" ? normalizeOnboardingPayload(parsed as OnboardingPayloadType) : parsed
+    ) as OnboardingPayloadType;
+    const { consent } = payload;
 
     // Hospital is data, not an enum (0044): check the table here for a clean
     // 422; onboard_patient hard-fails on unknown/inactive as the backstop.
     if (!(await isActiveHospital(supabase, payload.section_a.hospital))) {
       return jsonError(422, "invalid_hospital", "Please select a valid hospital.");
     }
-    const { data: settings, error: settingsErr } = await supabase
-      .from("practice_settings")
-      .select("active_consent_version, active_consent_body")
-      .eq("id", 1)
-      .single();
-    if (settingsErr || !settings) {
-      return jsonError(500, "consent_settings_unavailable", settingsErr?.message);
-    }
 
-    const identity = patientIdentity(payload);
-    if (identity) {
-      let duplicateQuery = supabase
-        .from("patients")
-        .select("id, file_number, archived_at")
-        .eq("id_type", identity.idType)
-        .eq("id_number", identity.idNumber)
-        .limit(1);
-      if (identity.idType === "passport") {
-        duplicateQuery = identity.idCountry
-          ? duplicateQuery.eq("id_country", identity.idCountry)
-          : duplicateQuery.is("id_country", null);
-      }
+    // SA-only national-ID duplicate pre-check. US identity is name + DOB, which
+    // is not unique (distinct people share it), so US duplicate handling is a
+    // soft warning (a later slice) — there is no hard pre-check here.
+    if (locale === "za") {
+      const identity = patientIdentity(payload);
+      if (identity) {
+        let duplicateQuery = supabase
+          .from("patients")
+          .select("id, file_number, archived_at")
+          .eq("id_type", identity.idType)
+          .eq("id_number", identity.idNumber)
+          .limit(1);
+        if (identity.idType === "passport") {
+          duplicateQuery = identity.idCountry
+            ? duplicateQuery.eq("id_country", identity.idCountry)
+            : duplicateQuery.is("id_country", null);
+        }
 
-      const { data: duplicatePatients, error: duplicateErr } = await duplicateQuery;
-      if (duplicateErr) return jsonError(500, "duplicate_check_failed", duplicateErr.message);
-      const duplicate = duplicatePatients?.[0];
-      if (duplicate) {
-        return jsonError(
-          409,
-          "duplicate_patient",
-          `A patient with this ID already exists as file ${duplicate.file_number}. Open the existing record instead of creating a duplicate.`,
-          { existing: { id: duplicate.id, file_number: duplicate.file_number, archived_at: duplicate.archived_at } }
-        );
+        const { data: duplicatePatients, error: duplicateErr } = await duplicateQuery;
+        if (duplicateErr) return jsonError(500, "duplicate_check_failed", duplicateErr.message);
+        const duplicate = duplicatePatients?.[0];
+        if (duplicate) {
+          return jsonError(
+            409,
+            "duplicate_patient",
+            `A patient with this ID already exists as file ${duplicate.file_number}. Open the existing record instead of creating a duplicate.`,
+            { existing: { id: duplicate.id, file_number: duplicate.file_number, archived_at: duplicate.archived_at } }
+          );
+        }
       }
     }
 
