@@ -12,7 +12,7 @@ import {
   SectionE,
   TitleEnum,
 } from "@/lib/validation/patient";
-import { UsSectionA, UsSectionB, onboardingPayloadForLocale } from "@/lib/validation/onboarding-us";
+import { UsSectionA, UsSectionB, UsSectionC, onboardingPayloadForLocale } from "@/lib/validation/onboarding-us";
 import type { PracticeLocale } from "@/lib/practice/locale";
 
 export type ConsentCard = { badge: string; title: string; body: string };
@@ -62,6 +62,10 @@ type Draft = {
     plan: string;
     other_plan_detail: string;
     is_private_payer: boolean;
+    // US insurance (reuses the columns above per locale): group # + the insured's
+    // relationship to the subscriber. Empty for SA.
+    group_number: string;
+    subscriber_relationship: string;
   };
   section_d: { name: string; relationship: string; address: string; email: string; phone: string };
   section_e: {
@@ -125,6 +129,8 @@ const emptyDraft: Draft = {
     plan: "",
     other_plan_detail: "",
     is_private_payer: false,
+    group_number: "",
+    subscriber_relationship: "self",
   },
   section_d: { name: "", relationship: "", address: "", email: "", phone: "+27" },
   section_e: { referrer_type: "self", referrer_name: "", referrer_phone: "", referral_notes: "" },
@@ -355,7 +361,7 @@ export function OnboardingWizard(props: {
   const stepValidators: Array<(d: Draft) => string[]> = [
     (d) => zodIssues((isUs ? UsSectionA : SectionA).safeParse(d.section_a)),
     (d) => zodIssues((isUs ? UsSectionB : SectionB).safeParse(d.section_b)),
-    (d) => zodIssues(SectionC.safeParse(d.section_c)),
+    (d) => zodIssues((isUs ? UsSectionC : SectionC).safeParse(d.section_c)),
     (d) => zodIssues(SectionD.safeParse(d.section_d)),
     (d) => zodIssues(SectionE.safeParse(d.section_e)),
     (d) =>
@@ -746,7 +752,53 @@ export function OnboardingWizard(props: {
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && isUs && (
+          <>
+            <h2 className="section-title">C — Insurance</h2>
+            <p className="text-xs text-text-secondary">
+              Captured for the record and the billing handoff. Claims and eligibility are run by your billing partner, outside this app.
+            </p>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={C.is_private_payer} onChange={(e) => setDraft({ ...draft, section_c: { ...C, is_private_payer: e.target.checked } })} />
+              Self-pay (no insurance)
+            </label>
+            {!C.is_private_payer && (
+              <>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={C.same_as_responsible} onChange={(e) => applySameAsResponsible(e.target.checked)} />
+                  Subscriber is the account-responsible party
+                </label>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Insurance carrier" required>
+                    <input className="input" value={C.medical_aid_name} onChange={(e) => setDraft({ ...draft, section_c: { ...C, medical_aid_name: e.target.value } })} placeholder="e.g. Aetna, UnitedHealthcare, BCBS" />
+                  </Field>
+                  <Field label="Plan">
+                    <input className="input" value={C.plan} onChange={(e) => setDraft({ ...draft, section_c: { ...C, plan: e.target.value } })} />
+                  </Field>
+                  <Field label="Subscriber ID" required>
+                    <input className="input font-mono" value={C.membership_number} onChange={(e) => setDraft({ ...draft, section_c: { ...C, membership_number: e.target.value } })} />
+                  </Field>
+                  <Field label="Group number">
+                    <input className="input font-mono" value={C.group_number} onChange={(e) => setDraft({ ...draft, section_c: { ...C, group_number: e.target.value } })} />
+                  </Field>
+                  <Field label="Subscriber name">
+                    <input className="input" value={C.main_member_name} onChange={(e) => setDraft({ ...draft, section_c: { ...C, main_member_name: e.target.value } })} />
+                  </Field>
+                  <Field label="Relationship to subscriber">
+                    <select className="input" value={C.subscriber_relationship} onChange={(e) => setDraft({ ...draft, section_c: { ...C, subscriber_relationship: e.target.value } })}>
+                      <option value="self">Self</option>
+                      <option value="spouse">Spouse</option>
+                      <option value="child">Child</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </Field>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {step === 2 && !isUs && (
           <>
             <h2 className="section-title">C — Medical aid</h2>
             <p className="text-xs text-text-secondary">

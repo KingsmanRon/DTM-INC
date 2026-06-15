@@ -164,4 +164,31 @@ describe("US onboarding schema (locale 'us')", () => {
     // The SA schema requires sa_id/passport + id_number, so a US-shaped payload fails it.
     expect(onboardingPayloadForLocale("za").safeParse(typicalUsAdultPayload).success).toBe(false);
   });
+
+  it("US insured payload (carrier + subscriber ID + group + relationship) passes", () => {
+    const r = OnboardingPayloadUs.safeParse({
+      ...typicalUsAdultPayload,
+      section_c: {
+        same_as_responsible: true,
+        main_member_name: "John Liberty",
+        medical_aid_name: "Aetna",
+        membership_number: "W123456789",
+        plan: "PPO",
+        other_plan_detail: "",
+        is_private_payer: false,
+        group_number: "GRP0001",
+        subscriber_relationship: "self",
+      },
+    });
+    if (!r.success) console.error(JSON.stringify(r.error.issues, null, 2));
+    expect(r.success).toBe(true);
+  });
+
+  it("US insured payload missing carrier/subscriber ID fails (not self-pay)", () => {
+    const r = OnboardingPayloadUs.safeParse({
+      ...typicalUsAdultPayload,
+      section_c: { ...typicalUsAdultPayload.section_c, is_private_payer: false },
+    });
+    expect(r.success).toBe(false);
+  });
 });

@@ -14,7 +14,6 @@ import { usDateOfBirth, usSsnLast4 } from "./us-identity";
 import {
   TitleEnum,
   MaritalStatus,
-  SectionC,
   SectionD,
   SectionE,
   DependantSchema,
@@ -75,11 +74,35 @@ export const UsSectionB = z.object({
   work_phone: z.string().optional().or(z.literal("")),
 });
 
-// Full US onboarding payload. Sections C/D/E + consent reused from the SA schema.
+export const SubscriberRelationship = z.enum(["self", "spouse", "child", "other"]);
+
+// Section C — US insurance. Reuses the patient_medical_aid column names the RPC
+// already reads (medical_aid_name = carrier, membership_number = subscriber ID,
+// main_member_name = subscriber name, plan = plan) plus the two genuinely-new US
+// fields (group_number, subscriber_relationship), so onboard_patient needs no
+// locale branch. Primary insurance only for this slice.
+export const UsSectionC = z
+  .object({
+    is_private_payer: z.boolean().default(false), // self-pay / cash
+    same_as_responsible: z.boolean().default(true),
+    main_member_name: z.string().optional().or(z.literal("")), // subscriber name
+    medical_aid_name: z.string().optional().or(z.literal("")), // insurance carrier
+    membership_number: z.string().optional().or(z.literal("")), // subscriber ID
+    plan: z.string().optional().or(z.literal("")),
+    group_number: z.string().optional().or(z.literal("")),
+    subscriber_relationship: SubscriberRelationship.optional(),
+    other_plan_detail: z.string().optional().or(z.literal("")),
+  })
+  .refine((v) => v.is_private_payer || (!!v.medical_aid_name && !!v.membership_number), {
+    message: "Insurance carrier and subscriber ID are required unless the patient is self-pay.",
+    path: ["medical_aid_name"],
+  });
+
+// Full US onboarding payload. Sections D/E + consent reused from the SA schema.
 export const OnboardingPayloadUs = z.object({
   section_a: UsSectionA,
   section_b: UsSectionB,
-  section_c: SectionC,
+  section_c: UsSectionC,
   section_d: SectionD,
   section_e: SectionE,
   dependants: z.array(DependantSchema).default([]),
