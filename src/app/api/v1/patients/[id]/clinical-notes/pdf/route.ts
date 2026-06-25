@@ -41,10 +41,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (patientErr) return jsonError(500, "db_error", patientErr.message);
     if (!patient) return jsonError(404, "not_found");
 
+    // Voided notes are excluded from the export, matching the active on-screen
+    // timeline and the GET endpoint's default (route.ts filters voided_at IS
+    // NULL). A void removes the note from the active clinical record; it stays
+    // preserved for audit/history (audit_logs + the "Show voided notes" view),
+    // but the exported record must reflect only the active notes.
     let notesQuery = supabase
       .from("clinical_notes")
       .select("id, note_date, encrypted_body, nonce, encrypted_ink, encrypted_ink_png, ink_png_nonce, is_finalised, created_at")
-      .eq("patient_id", id);
+      .eq("patient_id", id)
+      .is("voided_at", null);
     if (dateFilter) notesQuery = notesQuery.eq("note_date", dateFilter);
     const { data: notes, error } = await notesQuery.order("created_at", { ascending: true });
     if (error) return jsonError(500, "db_error", error.message);
