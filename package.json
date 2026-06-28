@@ -13,7 +13,11 @@
     "check:functions": "node scripts/check-canonical-functions.mjs",
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:verify-chain": "node scripts/verify-audit-chain.mjs",
-    "db:audit-logs": "node scripts/fetch-audit-logs.mjs"
+    "db:audit-logs": "node scripts/fetch-audit-logs.mjs",
+    "docs:compress": "tsx scripts/compress_patient_documents.ts",
+    "docs:compress:rollback": "tsx scripts/rollback_patient_document_compression.ts",
+    "docs:compress:cleanup": "tsx scripts/cleanup_patient_document_originals.ts",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
@@ -35,7 +39,9 @@
     "eslint": "^9.14.0",
     "eslint-config-next": "^15.1.6",
     "postcss": "^8.4.49",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.22.4",
     "typescript": "^5.6.3",
     "vitest": "^2.1.9"
   },
