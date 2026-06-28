@@ -6,7 +6,11 @@
 // pre-flight size check; the API routes use the same constants so the limit is
 // defined in exactly one place.
 
-export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 MB post-optimisation hard limit
+export const SOFT_DOCUMENT_WARNING_BYTES = 5 * 1024 * 1024; // 5 MB post-optimisation warning
+export const IMAGE_OPTIMISE_MAX_DIMENSION = 2200;
+export const IMAGE_OPTIMISE_QUALITY = 0.85;
+export const OPTIMISED_IMAGE_MIME = "image/jpeg" as const;
 
 export const ALLOWED_DOCUMENT_MIME = [
   "application/pdf",

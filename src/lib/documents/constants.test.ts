@@ -10,8 +10,8 @@ import {
 } from "./constants";
 
 describe("document constants", () => {
-  it("caps uploads at 25 MB", () => {
-    expect(MAX_DOCUMENT_BYTES).toBe(26214400);
+  it("caps uploads at 10 MB", () => {
+    expect(MAX_DOCUMENT_BYTES).toBe(10485760);
   });
 
   it("allows exactly the five accepted MIME types", () => {

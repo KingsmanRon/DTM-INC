@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { MAX_DOCUMENT_BYTES } from "@/lib/documents/constants";
+import { MAX_DOCUMENT_BYTES, SOFT_DOCUMENT_WARNING_BYTES } from "@/lib/documents/constants";
+import { optimiseDocumentImage } from "@/lib/documents/optimise";
 
 const BUCKET = "patient-documents";
 
@@ -12,7 +13,7 @@ type Doc = { id: string; category: string; original_filename: string; file_size:
 // generic line for anything unexpected (the old code surfaced raw codes).
 function friendlyUploadError(code: unknown): string {
   switch (code) {
-    case "file_too_large": return "File too large — max 25 MB.";
+    case "file_too_large": return "This document is too large. Please retake the photo closer to the page, crop unnecessary background, or upload a PDF.";
     case "unsupported_media_type": return "Unsupported file type. Use PDF, JPG, PNG, HEIC or WEBP.";
     case "invalid_file_content": return "That file's contents don't match a supported document type.";
     case "invalid_category": return "Please choose a valid category.";
@@ -40,6 +41,8 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [category, setCategory] = useState("other");
   const [busy, setBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -57,10 +60,23 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [patientId]);
 
   async function onUpload(file: File) {
-    setBusy(true); setError(null);
+    if (busy) return;
+    setBusy(true); setError(null); setWarning(null); setUploadStatus("Optimising document…");
     try {
-      // 0. Pre-flight size check — friendlier than a round-trip to fail.
-      if (file.size > MAX_DOCUMENT_BYTES) { setError("File too large — max 25 MB."); return; }
+      const originalFilename = file.name;
+      const optimised = await optimiseDocumentImage(file);
+      const uploadFile = optimised.file;
+
+      // 0. Post-optimisation size checks — the server enforces the same hard limit.
+      if (uploadFile.size > MAX_DOCUMENT_BYTES) {
+        setError("This document is too large. Please retake the photo closer to the page, crop unnecessary background, or upload a PDF.");
+        return;
+      }
+      if (uploadFile.size > SOFT_DOCUMENT_WARNING_BYTES) {
+        setWarning("This document is larger than 5 MB after optimisation and may take longer to upload.");
+      }
+
+      setUploadStatus("Uploading document…");
 
       // 1. Ask the API for a single-use signed upload URL (tiny JSON request,
       //    no file bytes — so it never hits Vercel's serverless body cap).
@@ -68,7 +84,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ filename: file.name, category, mime: file.type, size: file.size }),
+        body: JSON.stringify({ filename: uploadFile.name, category, mime: uploadFile.type, size: uploadFile.size }),
       });
       if (!initRes.ok) {
         const j = await initRes.json().catch(() => ({}));
@@ -82,7 +98,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
       const supabase = getSupabaseBrowser();
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
-        .uploadToSignedUrl(path, token, file, { contentType: file.type });
+        .uploadToSignedUrl(path, token, uploadFile, { contentType: uploadFile.type });
       if (upErr) { setError("Upload failed while sending the file."); return; }
 
       // 3. Finalise: server re-checks size, sniffs content, hashes and records.
@@ -90,7 +106,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ storageKey: path, filename: file.name, category, mime: file.type }),
+        body: JSON.stringify({ storageKey: path, filename: originalFilename, category, mime: uploadFile.type }),
       });
       if (!finRes.ok) {
         const j = await finRes.json().catch(() => ({}));
@@ -100,7 +116,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
 
       await refresh();
     } finally {
-      setBusy(false);
+      setBusy(false); setUploadStatus(null);
     }
   }
 
@@ -175,12 +191,13 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
           </select>
         </div>
         <div>
-          <label className="label">File (PDF, JPG, PNG, HEIC, WEBP — max 25 MB)</label>
-          <input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/webp"
+          <label className="label">File (PDF, JPG, PNG, HEIC, WEBP — max 10 MB after optimisation)</label>
+          <input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,image/webp"
                  disabled={busy}
                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload(f); }} />
         </div>
-        {busy ? <span className="text-text-secondary text-sm">Uploading…</span> : null}
+        {busy ? <span className="text-text-secondary text-sm">{uploadStatus ?? "Uploading document…"}</span> : null}
+        {warning ? <span className="text-amber-600 text-sm">{warning}</span> : null}
         {error ? <span className="text-state-danger text-sm">{error}</span> : null}
       </div>
 
