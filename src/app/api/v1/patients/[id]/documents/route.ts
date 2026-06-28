@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // Step 1 of the signed-URL upload flow. The browser sends only file *metadata*
 // (a few hundred bytes) — never the bytes — so this request stays far under
 // Vercel's ~4.5 MB serverless body cap that broke the old proxy-through-the-
-// function design (it returned a platform 413 before our 25 MB check could run).
+// function design (it returned a platform 413 before our app-layer size check could run).
 // We validate, mint a patient-scoped storage key the client cannot repoint at
 // another patient, and hand back a single-use signed upload URL. The bytes then
 // go browser -> Supabase directly; the row + audit are written by /finalize.

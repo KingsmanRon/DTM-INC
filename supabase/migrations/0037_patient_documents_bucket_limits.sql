@@ -4,11 +4,11 @@
 -- these bucket limits are the first line of defence (the finalize route's
 -- re-check is the second). Supabase rejects an oversized or wrong-type object
 -- at upload time, before any DB row exists. The values mirror the app-layer
--- limits in src/lib/documents/constants.ts: 25 MB; PDF/JPEG/PNG/HEIC/WEBP.
+-- limits in src/lib/documents/constants.ts: 10 MB; PDF/JPEG/PNG/HEIC/WEBP.
 --
--- 26214400 = 25 * 1024 * 1024.
+-- 10485760 = 10 * 1024 * 1024.
 update storage.buckets
-set file_size_limit = 26214400,
+set file_size_limit = 10485760,
     allowed_mime_types = array[
       'application/pdf',
       'image/jpeg',
