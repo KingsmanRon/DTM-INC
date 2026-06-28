@@ -8,6 +8,33 @@ export function isStandaloneMode(): boolean {
   return window.matchMedia?.("(display-mode: standalone)").matches === true || nav.standalone === true;
 }
 
+type RelatedApplication = { platform?: string; url?: string; id?: string };
+
+type NavigatorWithRelatedApps = Navigator & {
+  getInstalledRelatedApps?: () => Promise<RelatedApplication[]>;
+};
+
+// Detects whether the PWA is already installed on this device — i.e. the user
+// already has a DTM shortcut on their home screen / desktop. Unlike
+// isStandaloneMode(), this is true even when the page is open in a normal
+// browser tab rather than launched from the installed shortcut. It relies on
+// navigator.getInstalledRelatedApps(), which reports the current PWA when the
+// manifest lists itself under related_applications (see src/app/manifest.ts).
+//
+// Returns false on any platform/browser that doesn't support the API (iOS
+// Safari, Firefox, etc.) so callers can fall back to their existing checks.
+export async function hasInstalledAppShortcut(): Promise<boolean> {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as NavigatorWithRelatedApps;
+  if (typeof nav.getInstalledRelatedApps !== "function") return false;
+  try {
+    const apps = await nav.getInstalledRelatedApps();
+    return Array.isArray(apps) && apps.some((app) => app?.platform === "webapp");
+  } catch {
+    return false;
+  }
+}
+
 export function detectInstallHelpPlatform(): PwaPlatform {
   if (typeof window === "undefined") return "unknown";
 

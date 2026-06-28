@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { detectInstallHelpPlatform, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
+import { detectInstallHelpPlatform, hasInstalledAppShortcut, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -21,6 +21,20 @@ export function AndroidInstallButton() {
       return;
     }
 
+    // Even in a normal browser tab (not standalone), the user may already have
+    // a DTM shortcut on their home screen / desktop. In that case there is
+    // nothing to install, so hide the button. getInstalledRelatedApps() is the
+    // only reliable signal for this — beforeinstallprompt is suppressed by some
+    // browsers when already installed, but not all, so we can't rely on its
+    // absence alone.
+    let cancelled = false;
+    void hasInstalledAppShortcut().then((alreadyInstalled) => {
+      if (!cancelled && alreadyInstalled) {
+        setInstalled(true);
+        setPromptEvent(null);
+      }
+    });
+
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
       setPromptEvent(e as BeforeInstallPromptEvent);
@@ -38,6 +52,7 @@ export function AndroidInstallButton() {
     window.addEventListener("appinstalled", onInstalled);
 
     return () => {
+      cancelled = true;
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
     };

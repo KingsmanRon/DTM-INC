@@ -1,6 +1,12 @@
 import type { MetadataRoute } from "next";
 import { Branding } from "@/lib/branding";
 
+// Absolute URL of this manifest, used for the related_applications
+// self-reference below. Falls back to a relative path when NEXT_PUBLIC_APP_URL
+// is unset (e.g. local dev) — getInstalledRelatedApps() resolves it against the
+// current origin in that case.
+const manifestUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/manifest.webmanifest`;
+
 // Served at /manifest.webmanifest by Next 15 App Router.
 // Replaces the previous static public/manifest.webmanifest.
 //
@@ -26,6 +32,14 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#050A16",
     theme_color: "#050A16",
     orientation: "portrait",
+    // Self-reference so navigator.getInstalledRelatedApps() can report THIS PWA
+    // as installed when a shortcut already exists on the device. The install
+    // button (src/components/AndroidInstallButton.tsx) uses that to hide itself
+    // for users who have already added DTM to their home screen / desktop.
+    // prefer_related_applications stays false so browsers still surface the
+    // native PWA install flow.
+    related_applications: [{ platform: "webapp", url: manifestUrl }],
+    prefer_related_applications: false,
     icons: [
       { src: "/icons/favicon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/favicon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
