@@ -15,6 +15,12 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'audit_writer') then
     create role audit_writer noinherit nologin;
   end if;
+
+  -- Later migrations make SECURITY DEFINER functions owned by audit_writer.
+  -- PostgreSQL requires the migration role to be able to SET ROLE to the target
+  -- owner, so grant membership to the current migration role while keeping
+  -- audit_writer itself NOLOGIN/NOINHERIT.
+  execute format('grant audit_writer to %I', current_user);
 end $$;
 
 revoke all on audit_logs from public;
