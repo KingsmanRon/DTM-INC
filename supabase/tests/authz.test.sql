@@ -178,7 +178,7 @@ reset role;
 
 select pg_temp.impersonate('22222222-2222-2222-2222-222222222222');
 
-select like(
+select matches(
   (select file_number from public.onboard_patient(
      '22222222-2222-2222-2222-222222222222',
      '{"hospital":"Fountain Private Hospital","title":"Mr","first_names":"New","surname":"Patient","id_type":"sa_id","id_number":"9001015009086","phone":"+27110000004","address":"4 Street"}'::jsonb,
@@ -189,7 +189,7 @@ select like(
      '[]'::jsonb,
      '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"New Patient","patient_present_attestation":"true"}'::jsonb
    )),
-  'FOU-%',
+  '^FOU-',
   'staff onboarding allocates the hospital''s file prefix from public.hospitals'
 );
 
@@ -244,11 +244,11 @@ select throws_ok(
 reset role;
 select pg_temp.impersonate('22222222-2222-2222-2222-222222222222');
 
-select like(
+select matches(
   (select new_file_number from public.reassign_patient_hospital(
      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',
      'Onboarded under Nkanyezi in error; patient admits at Fountain')),
-  'FOU-%',
+  '^FOU-',
   'reassignment issues a new file number under the correct prefix'
 );
 
