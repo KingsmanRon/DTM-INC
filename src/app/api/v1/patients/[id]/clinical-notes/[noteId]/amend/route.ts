@@ -56,12 +56,20 @@ export async function POST(
 
     const { data: source, error: sourceErr } = await rls
       .from("clinical_notes")
-      .select("id, patient_id, dek_id, is_finalised, encrypted_ink")
+      .select("id, patient_id, dek_id, is_finalised, encrypted_ink, voided_at")
       .eq("id", noteId)
       .eq("patient_id", id)
       .maybeSingle();
     if (sourceErr) return jsonError(500, "db_error", sourceErr.message);
     if (!source) return jsonError(404, "not_found");
+
+    // Voided notes are terminal: a void removes the note from the active
+    // timeline and keeps it for audit/history only. Amending one would
+    // resurrect its content as a new active note, defeating the void — refuse
+    // it. The UI never offers Amend on a voided note; this guards the API path.
+    if (source.voided_at) {
+      return jsonError(409, "note_voided", "Voided notes cannot be amended.");
+    }
 
     // Handwritten notes cannot be amended — amendments are typed-only.
     if (source.encrypted_ink) {
