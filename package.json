@@ -17,7 +17,8 @@
     "docs:compress": "tsx scripts/compress_patient_documents.ts",
     "docs:compress:rollback": "tsx scripts/rollback_patient_document_compression.ts",
     "docs:compress:cleanup": "tsx scripts/cleanup_patient_document_originals.ts",
-    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json"
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "docs:archived:cleanup": "tsx scripts/cleanup_archived_patient_document_files.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
