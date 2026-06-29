@@ -321,7 +321,7 @@ export function BillingClient({ hospitals }: { hospitals: HospitalOption[] }) {
           <p className="text-text-secondary text-sm">No files staged yet. Search and add patients below.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[44rem] text-sm">
               <thead>
                 <tr className="text-left text-text-secondary">
                   <th className="py-1 pr-3">Patient</th>

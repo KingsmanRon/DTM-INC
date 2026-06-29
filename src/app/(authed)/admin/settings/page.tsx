@@ -47,9 +47,9 @@ export default async function SettingsPage() {
 
 function KV({ k, v }: { k: string; v: string | null }) {
   return (
-    <div className="flex gap-3">
-      <dt className="w-48 text-text-secondary">{k}</dt>
-      <dd className="flex-1">{v || "—"}</dd>
+    <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
+      <dt className="text-text-secondary sm:w-48 sm:shrink-0">{k}</dt>
+      <dd className="flex-1 break-words">{v || "—"}</dd>
     </div>
   );
 }

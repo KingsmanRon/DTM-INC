@@ -127,8 +127,8 @@ export function UsersAdmin({ users, currentUserId }: { users: AdminUserRow[]; cu
 
       {error ? <p className="text-state-danger text-sm">{error}</p> : null}
 
-      <div className="card">
-        <table className="w-full text-sm">
+      <div className="card overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-sm">
           <thead>
             <tr className="text-left text-text-secondary">
               <th className="py-2 pr-3">Email</th>

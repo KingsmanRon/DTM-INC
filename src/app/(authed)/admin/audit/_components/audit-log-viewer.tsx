@@ -106,7 +106,7 @@ export function AuditLogViewer() {
       {loading ? <p className="text-text-secondary text-sm">Loading…</p> : null}
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[48rem] text-sm">
           <thead>
             <tr className="text-left text-text-secondary">
               <th className="py-2 pr-3">#</th>

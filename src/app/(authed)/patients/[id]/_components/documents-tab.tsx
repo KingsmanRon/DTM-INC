@@ -183,17 +183,18 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="card flex items-end gap-3">
-        <div>
+      <div className="card flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="w-full sm:w-auto">
           <label className="label">Category</label>
-          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <select className="input sm:w-56" value={category} onChange={(e) => setCategory(e.target.value)}>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">File (PDF, JPG, PNG, HEIC, WEBP — max 10 MB after optimisation)</label>
           <input type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,image/webp"
                  disabled={busy}
+                 className="block w-full max-w-full text-sm file:mr-3 file:rounded file:border file:border-border-subtle file:bg-surface-elevated file:px-3 file:py-1.5 file:text-text-primary"
                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload(f); }} />
         </div>
         {busy ? <span className="text-text-secondary text-sm">{uploadStatus ?? "Uploading document…"}</span> : null}
@@ -208,12 +209,12 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
             {docs.map((d) => {
               const ext = splitFileName(d.original_filename).ext;
               return (
-              <li key={d.id} className="py-2 flex items-center justify-between gap-3">
+              <li key={d.id} className="py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 {editingId === d.id ? (
                   <div className="flex-1">
-                    <form className="flex items-center gap-2"
+                    <form className="flex flex-wrap items-center gap-2"
                           onSubmit={(e) => { e.preventDefault(); onRename(d.id); }}>
-                      <input className="input flex-1" value={draftName} autoFocus disabled={renaming}
+                      <input className="input min-w-0 flex-1" value={draftName} autoFocus disabled={renaming}
                              aria-label="New file name"
                              onChange={(e) => setDraftName(e.target.value)}
                              onKeyDown={(e) => { if (e.key === "Escape") cancelRename(); }} />
@@ -255,7 +256,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                         {d.category.replace(/_/g, " ")} · {(d.file_size / 1024).toFixed(0)} KB · {new Date(d.uploaded_at).toLocaleString()}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                       <button className="btn-secondary" onClick={() => startRename(d)}>Rename</button>
                       <button className="btn-secondary" onClick={() => openDoc(d.id)}>View</button>
                       <button className="btn-secondary text-state-danger" onClick={() => startRemove(d)}>Remove</button>

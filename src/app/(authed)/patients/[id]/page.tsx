@@ -47,16 +47,16 @@ export default async function PatientProfilePage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-4">
-      <header className="card flex items-center justify-between">
-        <div>
+      <header className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <div className="file-number text-lg">{patient.file_number}</div>
-          <h1 className="text-2xl font-semibold">{patient.surname}, {patient.first_names}</h1>
+          <h1 className="text-2xl font-semibold break-words">{patient.surname}, {patient.first_names}</h1>
           <p className="text-text-secondary text-sm">
             {patient.title} · ID {patient.id_number} · {patient.phone}
             {patient.status === "archived" ? <span className="ml-2 px-2 py-0.5 rounded bg-state-warning/20 text-state-warning text-xs">Archived</span> : null}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
           <PrintCurrentFileButton pdfHref={`/api/v1/patients/${id}/onboarding-pdf?disposition=inline`} />
           <Link
             href={`/api/v1/patients/${id}/onboarding-pdf`}
