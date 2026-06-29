@@ -18,12 +18,13 @@
 //   # hard-delete (all guards must pass):
 //   npx tsx scripts/cleanup_patient_document_originals.ts --apply \
 //     --hard-delete --i-understand-this-is-irreversible \
-//     --verification-confirmed --operator "Dr X" [--retention-days 30]
+//     --verification-confirmed --operator "Dr X" [--retention-days 30] [--bypass-retention-window]
 //
 // FLAGS  --apply  --retention-days N(=30, min 14)  --limit N
 //        --patient-id ID  --document-id ID
 //        --hard-delete --i-understand-this-is-irreversible
 //        --verification-confirmed  --operator NAME
+//        --bypass-retention-window
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   BUCKET,
@@ -45,6 +46,7 @@ type Args = {
   irreversibleAck: boolean;
   verificationConfirmed: boolean;
   operator: string | null;
+  bypassRetentionWindow: boolean;
   retentionDays: number;
   limit: number | null;
   patientId: string | null;
@@ -54,7 +56,7 @@ type Args = {
 function parseArgs(argv: string[]): Args {
   const a: Args = {
     apply: false, hardDelete: false, irreversibleAck: false, verificationConfirmed: false,
-    operator: null, retentionDays: DEFAULT_RETENTION_DAYS, limit: null, patientId: null, documentId: null,
+    operator: null, bypassRetentionWindow: false, retentionDays: DEFAULT_RETENTION_DAYS, limit: null, patientId: null, documentId: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -70,12 +72,16 @@ function parseArgs(argv: string[]): Args {
       case "--i-understand-this-is-irreversible": a.irreversibleAck = true; break;
       case "--verification-confirmed": a.verificationConfirmed = true; break;
       case "--operator": a.operator = next(); break;
+      case "--bypass-retention-window": a.bypassRetentionWindow = true; break;
       case "--retention-days": a.retentionDays = Number(next()); break;
       case "--limit": a.limit = Number(next()); break;
       case "--patient-id": a.patientId = next(); break;
       case "--document-id": a.documentId = next(); break;
       default: throw new Error(`unknown argument: ${arg}`);
     }
+  }
+  if (a.bypassRetentionWindow && !a.hardDelete) {
+    throw new Error("--bypass-retention-window is only valid with --hard-delete");
   }
   if (a.retentionDays < MIN_RETENTION_DAYS) {
     throw new Error(`--retention-days must be >= ${MIN_RETENTION_DAYS} (got ${a.retentionDays})`);
@@ -148,13 +154,16 @@ async function main() {
       throw new Error("--hard-delete requires --operator NAME for the sign-off record");
     }
     log(`operator sign-off: ${args.operator}; retention window: ${args.retentionDays} days\n`);
+    if (args.bypassRetentionWindow) {
+      log(`RETENTION WINDOW BYPASSED BY OPERATOR: ${args.operator}\n`);
+    }
   }
 
   const rows = await selectCompressed(client, args);
   log(`compressed rows in scope: ${rows.length}\n`);
 
   const cutoff = Date.now() - args.retentionDays * 24 * 60 * 60 * 1000;
-  let archived = 0, deleted = 0, skipped = 0, blocked = 0;
+  let archived = 0, deleted = 0, eligible = 0, skipped = 0, blocked = 0;
 
   for (const row of rows) {
     if (!args.hardDelete) {
@@ -171,13 +180,16 @@ async function main() {
     }
 
     // ── HARD-DELETE (guarded) ──────────────────────────────────────────────
-    // Guard a: terminal compressed (already filtered). Guard b: retention age.
-    const compressedAt = row.compressed_at ? Date.parse(row.compressed_at) : NaN;
-    if (!Number.isFinite(compressedAt) || compressedAt > cutoff) {
-      blocked++;
-      log(`[blocked] doc=${row.id} — inside ${args.retentionDays}d retention window ` +
-        `(compressed_at=${row.compressed_at})`);
-      continue;
+    // Guard a: terminal compressed (already filtered). Guard b: retention age
+    // (unless explicitly bypassed after operator sign-off).
+    if (!args.bypassRetentionWindow) {
+      const compressedAt = row.compressed_at ? Date.parse(row.compressed_at) : NaN;
+      if (!Number.isFinite(compressedAt) || compressedAt > cutoff) {
+        blocked++;
+        log(`[blocked] doc=${row.id} — inside ${args.retentionDays}d retention window ` +
+          `(compressed_at=${row.compressed_at})`);
+        continue;
+      }
     }
     // Guard c: the compressed object currently verifies (re-fetch + decode).
     const verifies = await decodesAsValidImage(client, row.storage_key);
@@ -186,15 +198,19 @@ async function main() {
       log(`[blocked] doc=${row.id} — compressed object does not verify: ${verifies.reason}`);
       continue;
     }
-    if (!row.original_storage_key) { blocked++; continue; }
+    if (!row.original_storage_key) {
+      blocked++;
+      log(`[blocked] doc=${row.id} — original_storage_key is missing`);
+      continue;
+    }
     if (!(await objectExists(client, row.original_storage_key))) {
-      skipped++;
-      log(`[skip] doc=${row.id} — original already absent at ${row.original_storage_key}`);
+      blocked++;
+      log(`[blocked] doc=${row.id} — original missing at ${row.original_storage_key}`);
       continue;
     }
 
     if (!args.apply) {
-      skipped++;
+      eligible++;
       log(`[would-hard-delete] doc=${row.id} original=${row.original_storage_key} ` +
         `(${fmtBytes(row.original_file_size ?? 0)}) — all guards pass`);
       continue;
@@ -208,8 +224,9 @@ async function main() {
 
   log("\n── summary ───────────────────────────────────────────────");
   if (args.hardDelete) {
-    log(`  originals ${args.apply ? "hard-deleted" : "eligible"}: ${args.apply ? deleted : skipped}`);
+    log(`  originals ${args.apply ? "hard-deleted" : "eligible"}: ${args.apply ? deleted : eligible}`);
     log(`  blocked by guards: ${blocked}`);
+    log(`  retention bypass used: ${args.bypassRetentionWindow ? "yes" : "no"}`);
   } else {
     log(`  originals ${args.apply ? "archived" : "to archive"}: ${args.apply ? archived : skipped}`);
   }
