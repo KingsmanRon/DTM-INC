@@ -7,39 +7,39 @@ import styles from "../demo.module.css";
 const chapters = [
   {
     number: "01",
-    short: "Intake",
-    title: "Start with one search",
-    body: "Find an existing file or begin a new patient in seconds.",
-    aria: "Patient search and new patient onboarding",
+    short: "Duplicates",
+    title: "Stop duplicate files before they start",
+    body: "DTM checks legal identity and opens the existing patient file instead.",
+    aria: "Exact identity duplicate prevention",
   },
   {
     number: "02",
-    short: "Capture",
-    title: "Capture once",
-    body: "A guided seven-step flow keeps every intake complete.",
-    aria: "Seven-step patient intake form",
+    short: "Onboarding",
+    title: "Onboard the complete patient",
+    body: "Seven guided sections keep every intake complete and recoverable.",
+    aria: "Complete seven section patient onboarding",
   },
   {
     number: "03",
-    short: "Patient file",
-    title: "Work from one patient file",
-    body: "Demographics, documents and clinical notes stay together.",
-    aria: "Unified patient record",
+    short: "Documents",
+    title: "Keep documents with the patient",
+    body: "Attach, verify and correct patient documents without losing accountability.",
+    aria: "Secure patient document attachment",
   },
   {
     number: "04",
-    short: "Close",
-    title: "Close the loop",
-    body: "Prepare billing exports and retain an append-only audit trail.",
-    aria: "Billing export and audit trail",
+    short: "Clinical notes",
+    title: "Write notes without rewriting history",
+    body: "Finalise, amend and void notes while preserving the original record.",
+    aria: "Defensible doctor only clinical notes",
   },
 ] as const;
 
 const cursorPositions = [
-  { x: 80, y: 22 },
-  { x: 83, y: 82 },
-  { x: 44, y: 32 },
-  { x: 79, y: 39 },
+  { x: 80, y: 73 },
+  { x: 82, y: 83 },
+  { x: 80, y: 38 },
+  { x: 78, y: 31 },
 ] as const;
 
 type IconName =
@@ -51,14 +51,15 @@ type IconName =
   | "shield"
   | "search"
   | "folder"
+  | "check"
   | "arrow"
   | "replay";
 
-export function DemoExperience() {
+export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number }) {
   const storyRef = useRef<HTMLElement>(null);
   const chapterRefs = useRef<Array<HTMLElement | null>>([]);
-  const [activeChapter, setActiveChapter] = useState(0);
-  const [progress, setProgress] = useState(0);
+  const [activeChapter, setActiveChapter] = useState(initialChapter);
+  const [progress, setProgress] = useState(initialChapter / (chapters.length - 1));
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
@@ -105,10 +106,8 @@ export function DemoExperience() {
       const scrollable = Math.max(story.offsetHeight - window.innerHeight, 1);
       const travelled = Math.min(Math.max(-rect.top, 0), scrollable);
       const nextProgress = travelled / scrollable;
-      const nextChapter = Math.min(chapters.length - 1, Math.floor(nextProgress * chapters.length));
 
       setProgress(nextProgress);
-      setActiveChapter(nextChapter);
     };
 
     const queueUpdate = () => {
@@ -127,9 +126,26 @@ export function DemoExperience() {
     };
   }, []);
 
+  useEffect(() => {
+    if (initialChapter <= 0) return;
+    chapterRefs.current[initialChapter]?.scrollIntoView({ behavior: "auto", block: "center" });
+  }, [initialChapter]);
+
   const scrollTo = useCallback(
     (id: string) => {
       document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
+    },
+    [reducedMotion],
+  );
+
+  const showChapter = useCallback(
+    (index: number) => {
+      setActiveChapter(index);
+      setProgress(index / (chapters.length - 1));
+      chapterRefs.current[index]?.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "center",
+      });
     },
     [reducedMotion],
   );
@@ -147,7 +163,7 @@ export function DemoExperience() {
               paperwork.
             </h1>
             <p className={styles.heroLead}>
-              See how DTM Inc. moves a patient from first intake to a complete, auditable file.
+              See how DTM Inc. prevents duplicate files and turns first intake into a complete, defensible patient record.
             </p>
             <button className={styles.scrollButton} type="button" onClick={() => scrollTo("tour")}>
               <Icon name="arrow" />
@@ -186,9 +202,16 @@ export function DemoExperience() {
                 }}
                 aria-current={activeChapter === index ? "step" : undefined}
               >
-                <div className={styles.chapterNumber}>{chapter.number}</div>
-                <h3>{chapter.title}</h3>
-                <p>{chapter.body}</p>
+                <button
+                  type="button"
+                  className={styles.chapterButton}
+                  onClick={() => showChapter(index)}
+                  aria-label={`Show ${chapter.title}`}
+                >
+                  <span className={styles.chapterNumber}>{chapter.number}</span>
+                  <h3>{chapter.title}</h3>
+                  <p>{chapter.body}</p>
+                </button>
               </article>
             ))}
           </div>
@@ -202,10 +225,10 @@ export function DemoExperience() {
                 <div className={styles.stageInner}>
                   <ProductSidebar active={activeChapter} />
                   <div className={styles.stageContent}>
-                    <StagePane active={activeChapter === 0}><SearchStage /></StagePane>
+                    <StagePane active={activeChapter === 0}><DuplicateStage /></StagePane>
                     <StagePane active={activeChapter === 1}><OnboardingStage /></StagePane>
-                    <StagePane active={activeChapter === 2}><PatientFileStage /></StagePane>
-                    <StagePane active={activeChapter === 3}><CloseLoopStage /></StagePane>
+                    <StagePane active={activeChapter === 2}><DocumentsStage /></StagePane>
+                    <StagePane active={activeChapter === 3}><ClinicalNotesStage /></StagePane>
                   </div>
                 </div>
               </ProductChrome>
@@ -227,10 +250,10 @@ export function DemoExperience() {
         <div className={styles.finalGrid}>
           <div className={styles.finalCopy}>
             <h2 id="final-title">
-              From first intake to a file <span>you can trust.</span>
+              From first search to a file <span>you can trust.</span>
             </h2>
             <p className={styles.finalLead}>
-              One guided workflow for patient details, documents, clinical notes, billing exports and accountable access.
+              One guided workflow for complete onboarding, patient documents and defensible clinical notes.
             </p>
             <p className={styles.finalNote}>Built around the work your practice already does.</p>
             <div className={styles.finalActions}>
@@ -299,8 +322,8 @@ function HeroProductWindow() {
           </div>
           <div className={styles.heroOnboarding}>
             <div>
-              <strong>Onboard a new patient</strong>
-              <span>Capture the paper form once, then keep the file digital.</span>
+              <strong>Duplicate protection before creation</strong>
+              <span>Match the legal identity, then open the existing patient file.</span>
             </div>
             <MiniStepper />
           </div>
@@ -336,7 +359,7 @@ function ProductSidebar({ active, compact = false }: { active: number; compact?:
     ],
     [],
   );
-  const activeIndex = active === 0 || active === 1 ? 1 : active === 2 ? 2 : 4;
+  const activeIndex = active === 0 || active === 1 ? 1 : active === 2 ? 2 : 3;
 
   return (
     <aside className={`${styles.productSidebar} ${compact ? styles.productSidebarCompact : ""}`} aria-hidden="true">
@@ -357,22 +380,29 @@ function StagePane({ active, children }: { active: boolean; children: React.Reac
   );
 }
 
-function SearchStage() {
+function DuplicateStage() {
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
-        <div><h3>Find a patient</h3><p>Search by file number, name, ID, phone or medical aid number.</p></div>
-        <span className={styles.primaryControl}>New patient</span>
+        <div><h3>Check before creating</h3><p>DTM checks a normalised SA ID or passport before a new patient file is created.</p></div>
+        <span className={styles.stepCounter}>Identity check</span>
       </div>
-      <div className={styles.searchField}><Icon name="search" /><span>Thandi Mokoena</span><kbd>⌘ K</kbd></div>
-      <div className={styles.searchResultLabel}>1 matching patient</div>
+      <div className={styles.identityFields}>
+        <MockField label="Identity type" value="South African ID" />
+        <MockField label="ID number" value="900101 1234 082" />
+      </div>
+      <div className={styles.searchResultLabel}>Existing legal identity found</div>
       <div className={styles.searchResult}>
         <span className={styles.avatar}>TM</span>
         <div><strong>Mokoena, Thandi</strong><small>SA ID · 900101 1234 082</small></div>
         <span className={styles.fileNumber}>NTH-2026-0147</span>
         <span className={styles.activeStatus}>Active</span>
       </div>
-      <div className={styles.calloutLine}><span />One search keeps reception moving.</div>
+      <div className={styles.identityNotice}>
+        <span className={styles.closeIcon}><Icon name="shield" /></span>
+        <div><strong>Duplicate file prevented</strong><small>Open the existing record instead of creating another patient.</small></div>
+        <span className={styles.secondaryControl}>Open existing file</span>
+      </div>
     </div>
   );
 }
@@ -382,73 +412,83 @@ function OnboardingStage() {
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
-        <div><h3>New patient onboarding</h3><p>Capture every section from the paper form.</p></div>
-        <span className={styles.stepCounter}>Step 1 of 7</span>
+        <div><h3>Complete patient onboarding</h3><p>Every required section is reviewed before DTM generates the patient file.</p></div>
+        <span className={styles.stepCounter}>Step 7 of 7</span>
       </div>
       <div className={styles.fullStepper}>
         {steps.map((step, index) => (
-          <div className={index === 0 ? styles.stepActive : ""} key={step}>
+          <div className={index === steps.length - 1 ? styles.stepActive : styles.stepComplete} key={step}>
             <span>{index + 1}</span><small>{step}</small>
           </div>
         ))}
       </div>
-      <div className={styles.mockForm}>
-        <MockField label="First names" value="Thandi" />
-        <MockField label="Surname" value="Mokoena" />
-        <MockField label="SA ID" value="900101 1234 082" />
-        <MockField label="Mobile number" value="+27 82 123 4567" />
+      <div className={styles.completionGrid}>
+        <CompletionItem label="Patient identity" value="SA ID verified" />
+        <CompletionItem label="Responsible person" value="Captured" />
+        <CompletionItem label="Medical aid" value="Ubuntu Health" />
+        <CompletionItem label="Emergency contact" value="Captured" />
+        <CompletionItem label="Referral and dependants" value="Reviewed" />
+        <CompletionItem label="Consent" value="Signed in person" />
       </div>
       <div className={styles.mockFormFooter}>
-        <span>Draft saved on this device</span>
-        <span className={styles.primaryControl}>Continue</span>
+        <span>Draft saved in this session · consent text current</span>
+        <span className={styles.primaryControl}>Submit and generate file number</span>
       </div>
     </div>
   );
 }
 
-function PatientFileStage() {
+function DocumentsStage() {
   return (
     <div className={styles.mockPage}>
       <div className={styles.patientHeader}>
         <span className={styles.avatarLarge}>TM</span>
         <div><h3>Mokoena, Thandi</h3><p><span>NTH-2026-0147</span> · Active patient</p></div>
-        <span className={styles.secondaryControl}><Icon name="document" />Download onboarding PDF</span>
+        <span className={styles.activeStatus}>Patient file</span>
       </div>
       <div className={styles.mockTabs}>
-        <span className={styles.mockTabActive}>Demographics</span><span>Documents</span><span>Clinical notes</span>
+        <span>Demographics</span><span className={styles.mockTabActive}>Documents</span><span>Clinical notes</span>
       </div>
-      <div className={styles.recordGrid}>
-        <div><small>Patient details</small><strong>Thandi Mokoena</strong><span>SA ID · 900101 1234 082</span></div>
-        <div><small>Medical aid</small><strong>Ubuntu Health</strong><span>Membership · 8821047</span></div>
-        <div><small>Contact</small><strong>+27 82 123 4567</strong><span>thandi@example.test</span></div>
-        <div><small>Emergency contact</small><strong>Lerato Mokoena</strong><span>Sister · +27 82 555 0148</span></div>
+      <div className={styles.documentUpload}>
+        <div><small>Document category</small><strong>ID copy</strong></div>
+        <div><small>Selected file</small><strong>thandi-mokoena-id.jpg</strong></div>
+        <span className={styles.primaryControl}>Attach document</span>
       </div>
-      <div className={styles.fileStrip}><Icon name="folder" /><div><strong>Everything stays with the patient</strong><span>Demographics, signed documents and role-controlled notes.</span></div></div>
+      <div className={styles.documentList}>
+        <DocumentItem name="Thandi Mokoena ID copy.pdf" meta="ID copy · 428 KB · Optimised" />
+        <DocumentItem name="Dr Naidoo referral letter.pdf" meta="Referral letter · 212 KB · Verified" />
+      </div>
+      <div className={styles.fileStrip}><Icon name="shield" /><div><strong>Checked before it joins the patient file</strong><span>Content verified, integrity recorded and viewing access controlled.</span></div></div>
     </div>
   );
 }
 
-function CloseLoopStage() {
+function ClinicalNotesStage() {
   return (
     <div className={styles.mockPage}>
-      <div className={styles.mockPageHeading}>
-        <div><h3>Close the loop</h3><p>Prepare the monthly hand-off and preserve accountable access.</p></div>
+      <div className={styles.patientHeader}>
+        <span className={styles.avatarLarge}>TM</span>
+        <div><h3>Mokoena, Thandi</h3><p><span>NTH-2026-0147</span> · Doctor view</p></div>
+        <span className={styles.doctorOnly}>Doctor only</span>
       </div>
-      <div className={styles.closeStack}>
-        <div className={styles.closePanel}>
-          <span className={styles.closeIcon}><Icon name="billing" /></span>
-          <div><small>Monthly billing export</small><strong>Netcare · July 2026</strong><span>12 patient files staged</span></div>
-          <span className={styles.fileNumber}>DTM_Netcare_2026-07.xlsx</span>
-          <span className={styles.primaryControl}>Generate .xlsx</span>
+      <div className={styles.mockTabs}>
+        <span>Demographics</span><span>Documents</span><span className={styles.mockTabActive}>Clinical notes</span>
+      </div>
+      <div className={styles.noteComposer}>
+        <div><small>New clinical note · 20 July 2026</small><strong>Wound clean and dry. Patient mobilising well. Continue current care plan.</strong></div>
+        <span className={styles.primaryControl}>Save note</span>
+      </div>
+      <div className={styles.noteTimeline}>
+        <div className={styles.noteSuperseded}>
+          <div><strong>18 July 2026</strong><span>Finalised · Superseded</span></div>
+          <p>Initial post operative review completed.</p>
         </div>
-        <div className={styles.closePanel}>
-          <span className={styles.closeIcon}><Icon name="shield" /></span>
-          <div><small>Append-only audit</small><strong>Billing export generated</strong><span>Recorded with user, time and action</span></div>
-          <span className={styles.auditTime}>20 Jul 2026 · 14:32</span>
-          <span className={styles.activeStatus}>Verified</span>
+        <div className={styles.noteCurrent}>
+          <div><strong>20 July 2026</strong><span>Finalised amendment</span></div>
+          <p>Post operative review updated after follow up. Original note preserved.</p>
         </div>
       </div>
-      <div className={styles.flowLine} aria-hidden="true"><span>Intake</span><i /><span>Patient file</span><i /><span>Billing</span><i /><span>Audit</span></div>
+      <div className={styles.flowLine} aria-hidden="true"><span>Save</span><i /><span>Finalise</span><i /><span>Amend</span><i /><span>Void with reason</span></div>
     </div>
   );
 }
@@ -489,14 +529,14 @@ function JourneySummary() {
             <span className={styles.activeStatus}>Active</span>
           </div>
           <div className={styles.mockTabs}><span className={styles.mockTabActive}>Demographics</span><span>Documents</span><span>Clinical notes</span></div>
-          <div className={styles.summaryFields}><span>First names<strong>Thandi</strong></span><span>Surname<strong>Mokoena</strong></span><span>File number<strong>NTH-2026-0147</strong></span><span>Mobile number<strong>+27 82 123 4567</strong></span></div>
+          <div className={styles.summaryFields}><span>Duplicate check<strong>Existing identity resolved</strong></span><span>Onboarding<strong>Seven sections complete</strong></span><span>Documents<strong>2 verified files</strong></span><span>Clinical notes<strong>Finalised and protected</strong></span></div>
         </div>
       </ProductChrome>
       <div className={styles.summaryStrip}>
-        <Icon name="billing" /><div><strong>Billing export</strong><span>NTH-2026-0147_billing.xlsx</span></div><span className={styles.activeStatus}>Completed</span>
+        <Icon name="document" /><div><strong>Patient documents</strong><span>ID copy and referral letter attached</span></div><span className={styles.activeStatus}>Verified</span>
       </div>
       <div className={styles.summaryStrip}>
-        <Icon name="shield" /><div><strong>Append-only audit</strong><span>Billing export generated · 20 Jul 2026 · 14:32</span></div><span className={styles.activeStatus}>Verified</span>
+        <Icon name="calendar" /><div><strong>Clinical note history</strong><span>Finalised note with original preserved</span></div><span className={styles.activeStatus}>Protected</span>
       </div>
     </div>
   );
@@ -518,6 +558,20 @@ function MockField({ label, value }: { label: string; value: string }) {
   return <label className={styles.mockField}><span>{label}</span><strong>{value}</strong></label>;
 }
 
+function CompletionItem({ label, value }: { label: string; value: string }) {
+  return <div><span aria-hidden="true"><Icon name="check" /></span><small>{label}</small><strong>{value}</strong></div>;
+}
+
+function DocumentItem({ name, meta }: { name: string; meta: string }) {
+  return (
+    <div className={styles.documentItem}>
+      <span className={styles.closeIcon}><Icon name="document" /></span>
+      <div><strong>{name}</strong><small>{meta}</small></div>
+      <span className={styles.activeStatus}>On file</span>
+    </div>
+  );
+}
+
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
     home: <><path d="M3.5 10.5 12 3l8.5 7.5" /><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" /></>,
@@ -528,6 +582,7 @@ function Icon({ name }: { name: IconName }) {
     shield: <><path d="M12 2.5 20 6v5.5c0 5.2-3.2 8.4-8 10-4.8-1.6-8-4.8-8-10V6z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
     folder: <path d="M2.5 6.5h7l2-2h10v15h-19z" />,
+    check: <path d="m5 12.5 4.2 4.2L19 7" />,
     arrow: <><path d="M12 3v17M6 14l6 6 6-6" /></>,
     replay: <><path d="M5.2 8A8.5 8.5 0 1 1 4 13" /><path d="M4.7 3.5 5.2 8l4.5-.5" /></>,
   };
