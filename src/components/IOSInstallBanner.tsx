@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { detectInstallHelpPlatform, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
 
 const DISMISS_KEY = "dtm-ios-install-dismissal";
@@ -29,6 +30,7 @@ function shouldShowBanner(): boolean {
 }
 
 export function IOSInstallBanner() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function IOSInstallBanner() {
     trackPwaInstallEvent("pwa_ios_banner_shown", { platform: detectInstallHelpPlatform(), source: "ios_banner" });
   }, []);
 
-  if (!visible) return null;
+  if (!visible || pathname === "/demo") return null;
 
   const dismiss = () => {
     setVisible(false);

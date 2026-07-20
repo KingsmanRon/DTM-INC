@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { detectInstallHelpPlatform, hasInstalledAppShortcut, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
 
 type BeforeInstallPromptEvent = Event & {
@@ -9,6 +10,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 export function AndroidInstallButton() {
+  const pathname = usePathname();
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const shownTracked = useRef(false);
@@ -91,7 +93,7 @@ export function AndroidInstallButton() {
     });
   }, [promptEvent]);
 
-  if (installed || !promptEvent || isStandaloneMode()) return null;
+  if (installed || !promptEvent || isStandaloneMode() || pathname === "/demo") return null;
 
   return (
     <button
