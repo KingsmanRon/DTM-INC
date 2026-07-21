@@ -145,7 +145,13 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
       if (!target) return;
       const stageRect = stage.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      if (!stageRect.width || !stageRect.height) return;
+      // A target hidden at the current breakpoint (display:none) measures as a
+      // zero rect at the origin — clear the cursor instead of parking it in the
+      // top-left corner.
+      if (!stageRect.width || !stageRect.height || !targetRect.width || !targetRect.height) {
+        setCursorPos(null);
+        return;
+      }
       setCursorPos({
         x: ((targetRect.left + targetRect.width / 2 - stageRect.left) / stageRect.width) * 100,
         y: ((targetRect.top + targetRect.height / 2 - stageRect.top) / stageRect.height) * 100,
@@ -318,9 +324,9 @@ function DemoBrand() {
   );
 }
 
-function ProductChrome({ children }: { children: React.ReactNode }) {
+function ProductChrome({ children, windowRef }: { children: React.ReactNode; windowRef?: React.Ref<HTMLDivElement> }) {
   return (
-    <div className={styles.productWindow}>
+    <div className={styles.productWindow} ref={windowRef}>
       <div className={styles.windowBar} aria-hidden="true"><i /><i /><i /></div>
       {children}
     </div>
@@ -328,15 +334,46 @@ function ProductChrome({ children }: { children: React.ReactNode }) {
 }
 
 function HeroProductWindow() {
+  const windowRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLSpanElement>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+
+  // Anchor the hero cursor to the real "New patient" control by measurement, so
+  // it rests on an actual target on every viewport instead of a fixed
+  // percentage that drifts into empty space.
+  useEffect(() => {
+    const win = windowRef.current;
+    const target = targetRef.current;
+    if (!win || !target) return;
+
+    const measure = () => {
+      const windowRect = win.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (!windowRect.width || !windowRect.height || !targetRect.width) {
+        setCursor(null);
+        return;
+      }
+      setCursor({
+        x: ((targetRect.left + targetRect.width / 2 - windowRect.left) / windowRect.width) * 100,
+        y: ((targetRect.top + targetRect.height / 2 - windowRect.top) / windowRect.height) * 100,
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(win);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <ProductChrome>
+    <ProductChrome windowRef={windowRef}>
       <div className={styles.heroApp}>
         <ProductSidebar active={0} compact />
         <div className={styles.heroAppContent}>
           <div className={styles.heroAppHeader}>
             <h2>Find a patient</h2>
             <div className={styles.mockSearch}><Icon name="search" />Search by name, ID or file number</div>
-            <span className={styles.primaryControl}>New patient</span>
+            <span className={styles.primaryControl} ref={targetRef}>New patient</span>
           </div>
           <div className={styles.patientRows}>
             <PatientRow name="Mokoena, Thandi" file="NTH-2026-0147" status="Active" />
@@ -352,7 +389,16 @@ function HeroProductWindow() {
           </div>
         </div>
       </div>
-      <div className={styles.heroCursor} aria-hidden="true"><CursorShape /><span /></div>
+      {cursor ? (
+        <span
+          className={styles.heroCursor}
+          style={{ left: `${cursor.x}%`, top: `${cursor.y}%` }}
+          aria-hidden="true"
+        >
+          <CursorShape />
+          <span />
+        </span>
+      ) : null}
     </ProductChrome>
   );
 }
