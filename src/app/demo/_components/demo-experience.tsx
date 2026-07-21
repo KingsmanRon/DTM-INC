@@ -35,13 +35,6 @@ const chapters = [
   },
 ] as const;
 
-const cursorPositions = [
-  { x: 80, y: 73 },
-  { x: 82, y: 83 },
-  { x: 80, y: 38 },
-  { x: 78, y: 31 },
-] as const;
-
 type IconName =
   | "home"
   | "patient"
@@ -61,9 +54,12 @@ type IconName =
 export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number }) {
   const storyRef = useRef<HTMLElement>(null);
   const chapterRefs = useRef<Array<HTMLElement | null>>([]);
+  const productStageRef = useRef<HTMLDivElement>(null);
+  const stageContentRef = useRef<HTMLDivElement>(null);
   const [activeChapter, setActiveChapter] = useState(initialChapter);
   const [progress, setProgress] = useState(initialChapter / (chapters.length - 1));
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -133,6 +129,34 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
     if (initialChapter <= 0) return;
     chapterRefs.current[initialChapter]?.scrollIntoView({ behavior: "auto", block: "center" });
   }, [initialChapter]);
+
+  // Anchor the walkthrough cursor to the active chapter's action button so it
+  // always rests on a real target, on every viewport, instead of a guessed
+  // percentage that drifts into empty space.
+  useEffect(() => {
+    if (reducedMotion) return;
+    const stage = productStageRef.current;
+    const content = stageContentRef.current;
+    if (!stage || !content) return;
+
+    const measure = () => {
+      const targets = content.querySelectorAll<HTMLElement>("[data-cursor-target]");
+      const target = targets[activeChapter];
+      if (!target) return;
+      const stageRect = stage.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (!stageRect.width || !stageRect.height) return;
+      setCursorPos({
+        x: ((targetRect.left + targetRect.width / 2 - stageRect.left) / stageRect.width) * 100,
+        y: ((targetRect.top + targetRect.height / 2 - stageRect.top) / stageRect.height) * 100,
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [activeChapter, reducedMotion]);
 
   const scrollTo = useCallback(
     (id: string) => {
@@ -223,11 +247,11 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
             <div className={styles.progressTrack} aria-hidden="true">
               <span style={{ transform: `scaleX(${progress})` }} />
             </div>
-            <div className={styles.productStage} aria-live="polite" aria-label={chapters[activeChapter]?.aria}>
+            <div className={styles.productStage} ref={productStageRef} aria-live="polite" aria-label={chapters[activeChapter]?.aria}>
               <ProductChrome>
                 <div className={styles.stageInner}>
                   <ProductSidebar active={activeChapter} />
-                  <div className={styles.stageContent}>
+                  <div className={styles.stageContent} ref={stageContentRef}>
                     <StagePane active={activeChapter === 0}><DuplicateStage /></StagePane>
                     <StagePane active={activeChapter === 1}><OnboardingStage /></StagePane>
                     <StagePane active={activeChapter === 2}><DocumentsStage /></StagePane>
@@ -236,12 +260,8 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
                 </div>
               </ProductChrome>
 
-              {!reducedMotion ? (
-                <DemoCursor
-                  chapter={activeChapter}
-                  x={cursorPositions[activeChapter]?.x ?? cursorPositions[0].x}
-                  y={cursorPositions[activeChapter]?.y ?? cursorPositions[0].y}
-                />
+              {!reducedMotion && cursorPos ? (
+                <DemoCursor chapter={activeChapter} x={cursorPos.x} y={cursorPos.y} />
               ) : null}
             </div>
             <p className={styles.scrollControls}><span aria-hidden="true" />Scroll controls the walkthrough</p>
@@ -404,7 +424,7 @@ function DuplicateStage() {
       <div className={styles.identityNotice}>
         <span className={styles.closeIcon}><Icon name="shield" /></span>
         <div><strong>Duplicate file prevented</strong><small>Open the existing record instead of creating another patient.</small></div>
-        <span className={styles.secondaryControl}>Open existing file</span>
+        <span className={styles.secondaryControl} data-cursor-target>Open existing file</span>
       </div>
     </div>
   );
@@ -435,7 +455,7 @@ function OnboardingStage() {
       </div>
       <div className={styles.mockFormFooter}>
         <span>Draft saved in this session · consent text current</span>
-        <span className={styles.primaryControl}>Submit and generate file number</span>
+        <span className={styles.primaryControl} data-cursor-target>Submit and generate file number</span>
       </div>
     </div>
   );
@@ -455,7 +475,7 @@ function DocumentsStage() {
       <div className={styles.documentUpload}>
         <div><small>Document category</small><strong>ID copy</strong></div>
         <div><small>Selected file</small><strong>thandi-mokoena-id.jpg</strong></div>
-        <span className={styles.primaryControl}>Attach document</span>
+        <span className={styles.primaryControl} data-cursor-target>Attach document</span>
       </div>
       <div className={styles.documentList}>
         <DocumentItem name="Thandi Mokoena ID copy.pdf" meta="ID copy · 428 KB · Optimised" />
@@ -479,7 +499,7 @@ function ClinicalNotesStage() {
       </div>
       <div className={styles.noteComposer}>
         <div><small>New clinical note · 20 July 2026</small><strong>Wound clean and dry. Patient mobilising well. Continue current care plan.</strong></div>
-        <span className={styles.primaryControl}>Save note</span>
+        <span className={styles.primaryControl} data-cursor-target>Save note</span>
       </div>
       <div className={styles.noteTimeline}>
         <div className={styles.noteSuperseded}>
