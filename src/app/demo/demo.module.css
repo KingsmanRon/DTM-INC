@@ -213,7 +213,6 @@
 .productSidebar svg,
 .closeIcon svg,
 .secondaryControl svg,
-.summaryStrip > svg,
 .fileStrip > svg,
 .mockSearch svg,
 .searchField svg {
@@ -755,8 +754,7 @@
 }
 
 .searchResult > div,
-.closePanel > div,
-.summaryStrip > div {
+.closePanel > div {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -764,7 +762,6 @@
 
 .searchResult small,
 .closePanel div span,
-.summaryStrip div span,
 .fileStrip span {
   margin-top: 0.25rem;
   color: var(--demo-muted);
@@ -1390,126 +1387,167 @@
   transform: rotate(180deg);
 }
 
-.journey {
-  position: relative;
-  padding-left: 5.8rem;
-}
-
-.journeyRail {
-  position: absolute;
-  top: 1rem;
-  bottom: 0;
-  left: 0;
+.trustPanel {
   display: flex;
-  width: 4.6rem;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid var(--demo-border-bright);
+  border-radius: 0.7rem;
+  padding: clamp(1.35rem, 2.3vw, 2rem);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(0, 212, 184, 0.06), transparent 18rem),
+    rgba(7, 14, 28, 0.9);
+  box-shadow: 0 1.75rem 5rem rgba(0, 0, 0, 0.35);
 }
 
-.journeyRail::before {
-  position: absolute;
-  top: 1.4rem;
-  bottom: 1.2rem;
-  left: 0.28rem;
-  width: 1px;
-  background: var(--demo-teal);
-  content: "";
+.trustPanelHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-bottom: 0.3rem;
 }
 
-.journeyRail span {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.05rem 1fr;
+.trustBadge {
+  align-self: flex-start;
+  border: 1px solid rgba(0, 212, 184, 0.4);
+  border-radius: 999px;
+  padding: 0.32rem 0.72rem;
   color: var(--demo-teal);
-  font-size: 0.62rem;
-}
-
-.journeyRail strong {
-  grid-column: 1 / -1;
-  margin-bottom: 0.2rem;
   font-family: var(--font-ibm-plex-mono), monospace;
-  font-size: 0.7rem;
-  font-weight: 450;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.journeyRail i {
-  position: relative;
-  z-index: 1;
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--demo-teal);
+.trustPanelHeader p {
+  margin: 0;
+  color: #aeb9c8;
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
-.productWindowCompact .windowBar {
-  height: 1.8rem;
+.trustPillars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.summaryFile {
-  padding: 1rem 1.15rem 1.2rem;
-}
-
-.summaryHeader {
+.trustPillar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
+  gap: 0.9rem;
+  border: 1px solid var(--demo-border);
+  border-radius: 0.45rem;
+  padding: 1rem 1.1rem;
+  background: rgba(14, 22, 38, 0.5);
+}
+
+.trustPillarIcon {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(0, 212, 184, 0.32);
+  border-radius: 0.4rem;
+  background: rgba(0, 212, 184, 0.07);
+  color: var(--demo-teal);
+}
+
+.trustPillarIcon svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.trustPillar > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.trustPillar strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.trustPillar p {
+  margin: 0.35rem 0 0;
+  color: var(--demo-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.trustTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.trustTags em {
+  border: 1px solid var(--demo-border-bright);
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  color: #9fb0c4;
+  font-size: 0.6rem;
+  font-style: normal;
+  letter-spacing: 0.02em;
+}
+
+.trustBilling {
+  display: grid;
+  grid-template-columns: auto 1fr;
   gap: 0.8rem;
   align-items: center;
-}
-
-.summaryHeader > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.summaryHeader > div span {
   margin-top: 0.15rem;
-  color: var(--demo-muted);
-  font-size: 0.66rem;
+  border: 1px dashed var(--demo-border-bright);
+  border-radius: 0.45rem;
+  padding: 0.85rem 1rem;
+  background: rgba(10, 19, 34, 0.55);
 }
 
-.summaryFields {
+.trustBillingIcon {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  margin-top: 1rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.35rem;
+  color: #8fa0b5;
 }
 
-.summaryFields > span {
+.trustBillingIcon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
+}
+
+.trustBilling > div {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 0.35rem;
-  border: 1px solid var(--demo-border);
-  padding: 0.7rem;
-  color: #748196;
-  font-size: 0.58rem;
 }
 
-.summaryFields strong {
-  color: #d5deeb;
-  font-size: 0.7rem;
-  font-weight: 450;
+.trustBilling strong {
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-.summaryStrip {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.75rem;
-  align-items: center;
-  margin-top: 0.75rem;
-  border: 1px solid var(--demo-border);
-  border-radius: 0.38rem;
-  padding: 0.8rem 1rem;
-  background: rgba(10, 19, 34, 0.92);
-}
-
-.summaryStrip > svg {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: var(--demo-teal);
-}
-
-.summaryStrip strong {
-  font-size: 0.75rem;
+.trustBilling span {
+  margin-top: 0.2rem;
+  color: var(--demo-muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
 }
 
 .demoFooter {
@@ -1589,10 +1627,6 @@
   .closePanel .activeStatus {
     grid-column: 2 / -1;
     justify-self: start;
-  }
-
-  .journey {
-    padding-left: 4.7rem;
   }
 }
 
@@ -2123,29 +2157,13 @@
     font-size: 2.55rem;
   }
 
-  .journey {
-    padding-left: 0;
+  .trustPillar {
+    gap: 0.65rem;
+    padding: 0.8rem 0.85rem;
   }
 
-  .journeyRail {
-    display: none;
-  }
-
-  .summaryFields {
-    grid-template-columns: 1fr;
-  }
-
-  .summaryFields > span:nth-child(n+3) {
-    display: none;
-  }
-
-  .summaryStrip {
-    grid-template-columns: auto 1fr;
-  }
-
-  .summaryStrip .activeStatus {
-    grid-column: 2;
-    justify-self: start;
+  .trustPillar p {
+    font-size: 0.72rem;
   }
 
   .demoFooter {

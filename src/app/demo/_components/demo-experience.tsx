@@ -53,7 +53,10 @@ type IconName =
   | "folder"
   | "check"
   | "arrow"
-  | "replay";
+  | "replay"
+  | "lock"
+  | "history"
+  | "ledger";
 
 export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number }) {
   const storyRef = useRef<HTMLElement>(null);
@@ -253,7 +256,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
               From first search to a file <span>you can trust.</span>
             </h2>
             <p className={styles.finalLead}>
-              One guided workflow for complete onboarding, patient documents and defensible clinical notes.
+              Complete onboarding, patient documents and defensible clinical notes — held together by three guarantees that hold on every record.
             </p>
             <p className={styles.finalNote}>Built around the work your practice already does.</p>
             <div className={styles.finalActions}>
@@ -268,7 +271,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
             </div>
           </div>
 
-          <JourneySummary />
+          <TrustPanel />
         </div>
 
         <footer className={styles.demoFooter}>
@@ -295,9 +298,9 @@ function DemoBrand() {
   );
 }
 
-function ProductChrome({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
+function ProductChrome({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${styles.productWindow} ${compact ? styles.productWindowCompact : ""}`}>
+    <div className={styles.productWindow}>
       <div className={styles.windowBar} aria-hidden="true"><i /><i /><i /></div>
       {children}
     </div>
@@ -515,30 +518,56 @@ function CursorShape() {
   );
 }
 
-function JourneySummary() {
+function TrustPanel() {
   return (
-    <div className={styles.journey}>
-      <div className={styles.journeyRail} aria-hidden="true">
-        {chapters.map((chapter) => <span key={chapter.number}><strong>{chapter.number}</strong><i />{chapter.short}</span>)}
+    <div className={styles.trustPanel} aria-label="How DTM Inc. keeps the record trustworthy">
+      <div className={styles.trustPanelHeader}>
+        <span className={styles.trustBadge}>Why the record holds up</span>
+        <p>Three guarantees run through every workflow in this tour.</p>
       </div>
-      <ProductChrome compact>
-        <div className={styles.summaryFile}>
-          <div className={styles.summaryHeader}>
-            <span className={styles.avatarLarge}>TM</span>
-            <div><strong>Thandi Mokoena</strong><span>File: NTH-2026-0147</span></div>
-            <span className={styles.activeStatus}>Active</span>
-          </div>
-          <div className={styles.mockTabs}><span className={styles.mockTabActive}>Demographics</span><span>Documents</span><span>Clinical notes</span></div>
-          <div className={styles.summaryFields}><span>Duplicate check<strong>Existing identity resolved</strong></span><span>Onboarding<strong>Seven sections complete</strong></span><span>Documents<strong>2 verified files</strong></span><span>Clinical notes<strong>Finalised and protected</strong></span></div>
+      <ul className={styles.trustPillars}>
+        <TrustPillar
+          icon="lock"
+          title="Controlled access"
+          body="Clinical notes are invisible to reception and admin — absent, not merely blocked. Notes are encrypted at rest, and files open only through short-lived links."
+          tags={["Role based", "Encrypted notes", "Expiring links"]}
+        />
+        <TrustPillar
+          icon="history"
+          title="Preserved history"
+          body="Nothing is overwritten. Finalising locks a note, an amendment links a new version to the original, and a removed document is archived rather than destroyed."
+          tags={["Locked on finalise", "Linked amendments", "Reason-backed voids"]}
+        />
+        <TrustPillar
+          icon="ledger"
+          title="Accountable actions"
+          body="Every action lands in an append-only, hash-chained audit log that a daily check re-verifies from end to end."
+          tags={["Tamper evident", "Daily verification", "Who and when"]}
+        />
+      </ul>
+      <div className={styles.trustBilling}>
+        <span className={styles.trustBillingIcon}><Icon name="billing" /></span>
+        <div>
+          <strong>Billing, as a supporting capability</strong>
+          <span>Monthly per-hospital exports staged straight from these records — handled, not the headline.</span>
         </div>
-      </ProductChrome>
-      <div className={styles.summaryStrip}>
-        <Icon name="document" /><div><strong>Patient documents</strong><span>ID copy and referral letter attached</span></div><span className={styles.activeStatus}>Verified</span>
-      </div>
-      <div className={styles.summaryStrip}>
-        <Icon name="calendar" /><div><strong>Clinical note history</strong><span>Finalised note with original preserved</span></div><span className={styles.activeStatus}>Protected</span>
       </div>
     </div>
+  );
+}
+
+function TrustPillar({ icon, title, body, tags }: { icon: IconName; title: string; body: string; tags: readonly string[] }) {
+  return (
+    <li className={styles.trustPillar}>
+      <span className={styles.trustPillarIcon}><Icon name={icon} /></span>
+      <div>
+        <strong>{title}</strong>
+        <p>{body}</p>
+        <span className={styles.trustTags}>
+          {tags.map((tag) => <em key={tag}>{tag}</em>)}
+        </span>
+      </div>
+    </li>
   );
 }
 
@@ -585,6 +614,9 @@ function Icon({ name }: { name: IconName }) {
     check: <path d="m5 12.5 4.2 4.2L19 7" />,
     arrow: <><path d="M12 3v17M6 14l6 6 6-6" /></>,
     replay: <><path d="M5.2 8A8.5 8.5 0 1 1 4 13" /><path d="M4.7 3.5 5.2 8l4.5-.5" /></>,
+    lock: <><rect x="4.75" y="10.25" width="14.5" height="10" rx="1.6" /><path d="M7.75 10.25V7.5a4.25 4.25 0 0 1 8.5 0v2.75" /><path d="M12 14v2.75" /></>,
+    history: <><path d="M3.6 12a8.4 8.4 0 1 0 2.5-6" /><path d="M3 4.2V8h3.8" /><path d="M12 7.6V12l3 1.9" /></>,
+    ledger: <><rect x="4.75" y="3.25" width="14.5" height="17.5" rx="1.5" /><path d="M8.25 8h7.5M8.25 12h7.5M8.25 16h4.75" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
