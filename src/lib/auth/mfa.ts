@@ -4,11 +4,7 @@
 //   AAL1 = signed in with password only.
 //   AAL2 = signed in AND passed an MFA (TOTP) challenge.
 //
-// Policy (FR-1):
-//   * doctor + admin: MFA mandatory on every session. If no factor enrolled →
-//     /mfa/enrol. If factor exists and current level is AAL1 → /mfa/challenge.
-//   * staff: MFA optional in v1, mandatory in v2. Not gated here today; a
-//     phase-2 flag flips this.
+// All application roles require a verified MFA factor and AAL2.
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getVerifiedUser, type AppRole } from "@/lib/auth/session";
 import { logSupabaseCall } from "@/lib/supabase/log";
@@ -19,8 +15,6 @@ export type MfaDecision =
   | { action: "challenge"; factorId: string };
 
 export async function resolveMfa(role: AppRole, route = "/dashboard", userId?: string): Promise<MfaDecision> {
-  if (role === "staff") return { action: "ok" };
-
   const supabase = await getSupabaseServer();
 
   // getAuthenticatorAssuranceLevel() is a LOCAL operation (decodes the session

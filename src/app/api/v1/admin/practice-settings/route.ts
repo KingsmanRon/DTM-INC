@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { requireRole, resolveSession } from "@/lib/auth/session";
+import { FileNumberFormat } from "@/lib/validation/file-number";
+import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { invalidatePracticeSettings } from "@/lib/practice/settings";
 import { writeAudit } from "@/lib/audit/log";
@@ -12,12 +13,15 @@ export const dynamic = "force-dynamic";
 // Anyone authenticated can READ settings — the header/footer need them.
 // Only admin can WRITE.
 export async function GET() {
-  const session = await resolveSession();
-  if (!session) return jsonError(401, "unauthenticated");
-  const supabase = await getSupabaseServer();
-  const { data, error } = await supabase.from("practice_settings").select("*").eq("id", 1).single();
-  if (error) return jsonError(500, "db_error", error.message);
-  return jsonOk(data);
+  try {
+    await requireRole(["doctor", "staff", "admin"]);
+    const supabase = await getSupabaseServer();
+    const { data, error } = await supabase.from("practice_settings").select("*").eq("id", 1).single();
+    if (error) return jsonError(500, "db_error", error.message);
+    return jsonOk(data);
+  } catch (err) {
+    return handleRouteError(err);
+  }
 }
 
 const Patch = z.object({
@@ -30,7 +34,7 @@ const Patch = z.object({
   practice_phone: z.string().optional(),
   logo_path: z.string().optional(),
   file_number_prefix: z.string().regex(/^[A-Z]{2,5}$/).optional(),
-  file_number_format: z.string().optional(),
+  file_number_format: FileNumberFormat.optional(),
   active_consent_version: z.string().optional(),
   active_consent_body: z.string().optional(),
   // Section G summary cards (0051) — presentation copy for the wizard,
@@ -50,25 +54,10 @@ const Patch = z.object({
   privacy_notice_body: z.string().optional(),
 });
 
-const GLOBAL_FALLBACK_FILE_PREFIX = "DTM";
-
 export async function PATCH(req: NextRequest) {
   try {
     const session = await requireRole("admin");
     const patch = await parseJson(req, Patch);
-
-    // Policy: file_number_prefix in practice_settings is a GLOBAL FALLBACK only.
-    // Hospital onboarding allocation uses explicit hospital->prefix mapping in SQL.
-    if (
-      patch.file_number_prefix !== undefined &&
-      patch.file_number_prefix !== GLOBAL_FALLBACK_FILE_PREFIX
-    ) {
-      return jsonError(
-        400,
-        "invalid_file_number_prefix_policy",
-        `file_number_prefix is a global fallback only and must remain ${GLOBAL_FALLBACK_FILE_PREFIX}. Update hospital prefix mapping in SQL onboarding logic instead.`
-      );
-    }
 
     const supabase = await getSupabaseServer();
     const { error } = await supabase

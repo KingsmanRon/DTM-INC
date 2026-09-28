@@ -1,3 +1,5 @@
+> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA.
+
 # Supabase Vault setup for clinical-note KEK
 
 ## 1) Run DB migrations first (required)

@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
 export default defineConfig({
+  test: { exclude: [...configDefaults.exclude, "client-output/**", ".local-validation/**"] },
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

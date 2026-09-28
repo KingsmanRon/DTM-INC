@@ -147,7 +147,7 @@ function LoginShell(props: {
         </p>
 
         <p className="text-text-secondary text-xs">
-          Doctor and admin accounts require MFA (TOTP). You will be prompted on first sign-in.
+          Doctor, staff and admin accounts require MFA (TOTP). You will be prompted on first sign-in.
         </p>
 
       </form>

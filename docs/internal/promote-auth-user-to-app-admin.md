@@ -1,3 +1,5 @@
+> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA.
+
 # Promote a Supabase Auth user to DTM app admin
 
 This system has **two separate concepts** of admin:

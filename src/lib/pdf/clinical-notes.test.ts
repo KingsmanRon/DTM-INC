@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
+import sharp from "sharp";
 import { renderClinicalNotesPdf } from "./clinical-notes";
 
-// Use a real PNG (the brand logo) so the image-embed path is genuinely
-// exercised; canvas.toBlob() produces the same kind of standard PNG at runtime.
-const REAL_PNG = fs.readFileSync(
-  path.join(process.cwd(), "public", "brand", "Dr. T. Mtshali_LOGO - PDF.png"),
-);
+// Synthetic PNG keeps the image path covered without shipping a client's logo.
+const REAL_PNG = await sharp({ create: { width: 20, height: 20, channels: 3, background: "white" } }).png().toBuffer();
 
 describe("clinical notes PDF", () => {
   it("renders typed text, an embedded handwriting PNG, and a draft placeholder", async () => {
     const pdf = await renderClinicalNotesPdf({
       logo: REAL_PNG,
       practice: { name: "Test Practice", doctorName: "Dr Test", qualifications: "MBChB", practiceNumber: "123", address: "1 Test St", phone: "000" },
-      fileNumber: "DTM-0001",
+      fileNumber: "TEST-0001",
       patientName: "Jane Doe",
       notes: [
         { note_date: "2026-06-03", is_finalised: true, body: "Line one\nLine two", inkPng: null, hasInk: false },

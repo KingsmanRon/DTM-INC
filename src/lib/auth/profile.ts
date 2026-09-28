@@ -103,12 +103,10 @@ export function sessionFromProfile(profile: AppProfileRow | null): Session | nul
 // caller bypasses it, so requireRole must re-assert step-up itself or MFA is
 // cosmetic against a scripted client holding a password-only (AAL1) session.
 //
-//   * doctor + admin: must have reached AAL2 (passed the TOTP challenge).
-//   * staff: MFA optional in v1 (same carve-out resolveMfa makes) — AAL1 is fine.
+// All three application roles require AAL2.
 //
 // Pure so it is unit-tested without server deps; the AAL value is fetched in
 // session.ts and passed in.
 export function apiMfaSatisfied(role: AppRole, currentLevel: string | null | undefined): boolean {
-  if (role === "staff") return true;
-  return currentLevel === "aal2";
+  return VALID_APP_ROLES.has(role) && currentLevel === "aal2";
 }

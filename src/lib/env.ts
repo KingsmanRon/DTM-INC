@@ -31,6 +31,10 @@ const ServerEnv = z.object({
   FEATURE_HANDWRITTEN_NOTES_PDF: EnvBoolean,
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 }).superRefine((env, ctx) => {
+  if (process.env.NEXT_PUBLIC_DEPLOYMENT_PROFILE === "client" &&
+      (env.CLINICAL_NOTES_KEY_PROVIDER !== "vault" || env.ALLOW_DEV_KEK_FALLBACK !== "false" || env.CLINICAL_NOTES_KEK_DEV_KEY)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["CLINICAL_NOTES_KEY_PROVIDER"], message: "Client deployments require Vault and prohibit development keys and fallback" });
+  }
   if (env.SUPABASE_SERVICE_ROLE_KEY === env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

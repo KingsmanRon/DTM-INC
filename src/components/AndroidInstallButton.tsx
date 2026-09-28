@@ -1,5 +1,7 @@
 "use client";
 
+import { Branding } from "@/lib/branding";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { detectInstallHelpPlatform, hasInstalledAppShortcut, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
@@ -99,7 +101,7 @@ export function AndroidInstallButton() {
     <button
       type="button"
       onClick={onClick}
-      aria-label="Install DTM Inc."
+      aria-label={`Install ${Branding.appName}`}
       style={{
         position: "fixed",
         right: 12,
@@ -116,7 +118,7 @@ export function AndroidInstallButton() {
         boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
       }}
     >
-      Install DTM
+      Install {Branding.appName}
     </button>
   );
 }

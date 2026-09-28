@@ -1,3 +1,5 @@
+> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA.
+
 # New-practice deployment runbook (v2 repackaging)
 
 How to stand up this codebase for a NEW practice as an isolated deployment

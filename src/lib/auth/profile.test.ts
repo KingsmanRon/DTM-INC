@@ -17,9 +17,10 @@ describe("apiMfaSatisfied", () => {
     expect(apiMfaSatisfied("admin", null)).toBe(false);
   });
 
-  it("allows staff at aal1 (MFA optional in v1)", () => {
-    expect(apiMfaSatisfied("staff", "aal1")).toBe(true);
+  it("requires aal2 for staff", () => {
+    expect(apiMfaSatisfied("staff", "aal1")).toBe(false);
     expect(apiMfaSatisfied("staff", "aal2")).toBe(true);
-    expect(apiMfaSatisfied("staff", null)).toBe(true);
+    expect(apiMfaSatisfied("staff", null)).toBe(false);
+    expect(apiMfaSatisfied("staff", undefined)).toBe(false);
   });
 });

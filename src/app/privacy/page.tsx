@@ -1,10 +1,13 @@
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+
+export const dynamic = "force-dynamic";
 
 export default async function PrivacyPage() {
-  const supabase = await getSupabaseServer();
+  // Public, explicitly projected practice contact data only. Never PHI.
+  const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from("practice_settings")
-    .select("practice_name, practice_address, information_officer_name, information_officer_email, privacy_notice_body")
+    .select("practice_name, practice_address, practice_phone, information_officer_name, information_officer_email, privacy_notice_body")
     .eq("id", 1)
     .maybeSingle();
 
@@ -18,13 +21,10 @@ export default async function PrivacyPage() {
 
       <section className="card text-sm space-y-2">
         <h2 className="font-semibold">Information Officer</h2>
-        <p>{data?.information_officer_name ?? "Dr. Thomas Mtshali"}</p>
-        <p>Email: {data?.information_officer_email ?? "drmtshalitm@gmail.com"}</p>
-        <p>Cell: 084 340 2177</p>
-        <p>Address 1: {data?.practice_address ?? "Clinix Naledi-Nkanyezi Private Hospital, 1 Moshoeshoe Street, Sebokeng 1982"}</p>
-        <p>Tel: 016 420-3160</p>
-        <p>Address 2: The Fountain Private Hospital, R500 Annan Road, Between Carletonville &amp; Fochville</p>
-        <p>Tel: 018 788-1285 / 1138</p>
+        <p>{data?.information_officer_name ?? "Contact the practice"}</p>
+        <p>Email: {data?.information_officer_email ?? "Contact the practice"}</p>
+        <p>Address: {data?.practice_address ?? "Contact the practice"}</p>
+        <p>Tel: {data?.practice_phone ?? "Contact the practice"}</p>
       </section>
 
       <section className="card text-sm space-y-2">

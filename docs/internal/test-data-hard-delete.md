@@ -1,3 +1,5 @@
+> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA.
+
 # Hard delete dummy patient data (Supabase SQL)
 
 `Supersedes 2026-04-29` means this guidance replaces the previous same-day note.

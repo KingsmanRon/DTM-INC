@@ -13,11 +13,10 @@ export const metadata: Metadata = {
   // manifest is auto-generated from src/app/manifest.ts and served at /manifest.webmanifest.
   icons: {
     icon: [
-      { url: "/icons/favicon.ico", sizes: "any" },
-      { url: "/icons/favicon-192x192.png", type: "image/png", sizes: "192x192" },
-      { url: "/icons/favicon-512x512.png", type: "image/png", sizes: "512x512" },
+      { url: Branding.icon192, type: "image/png", sizes: "192x192" },
+      { url: Branding.icon512, type: "image/png", sizes: "512x512" },
     ],
-    apple: { url: "/icons/apple-touch-icon.png", sizes: "180x180" },
+    apple: { url: Branding.appleIcon, sizes: "180x180" },
   },
   // iOS ignores the web manifest for home-screen pins, so these meta tags
   // are what give us standalone launch + the correct icon (not a screenshot)
@@ -40,7 +39,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-ZA">
-      <body>
+      <body style={{ "--practice-watermark": `url("${encodeURI(Branding.watermark)}")` } as React.CSSProperties}>
         {children}
         <SwRegister />
         <IOSInstallBanner />

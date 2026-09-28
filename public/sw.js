@@ -1,5 +1,5 @@
-const CACHE = "dtm-shell-v8";
-const SHELL_URLS = ["/manifest.webmanifest", "/icons/favicon.ico", "/icons/apple-touch-icon.png"];
+const CACHE = "practice-shell-v9";
+const SHELL_URLS = ["/manifest.webmanifest"];
 
 const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Offline</title></head><body><h1>You are offline</h1><p>Please reconnect and try again.</p></body></html>`;
 
@@ -47,12 +47,10 @@ function shouldBypassCache(request) {
 function isSafeStaticRequest(request) {
   const url = new URL(request.url);
   const path = url.pathname;
-  return (
-    path.startsWith("/icons/") ||
+  // An explicit branding allowlist. Image destinations may contain patient data.
+  return !url.search && (
     path === "/manifest.webmanifest" ||
-    request.destination === "style" ||
-    request.destination === "font" ||
-    request.destination === "image"
+    /^\/(icons|client-brand)\/(favicon-(192x192|512x512)\.png|apple-touch-icon\.png|favicon\.ico)$/.test(path)
   );
 }
 
@@ -76,6 +74,8 @@ async function fetchOrFallback(request, options = {}) {
 async function networkFirstNavigation(request) {
   const networkResponse = await fetchOrFallback(request, {
     context: "navigation fetch failed",
+    allowCacheFallback: false,
+    logOnError: false,
     fallbackResponse: null,
   });
 

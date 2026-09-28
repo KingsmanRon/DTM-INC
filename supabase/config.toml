@@ -1,7 +1,15 @@
 # Minimal Supabase CLI config — exists so `supabase db start` + `supabase test db`
 # can run the pgTAP authz suite (supabase/tests/) locally and in CI against the
 # migrations in this repo. All unspecified settings use CLI defaults.
-project_id = "dtm-inc"
+project_id = "practice-baseline-validation"
+
+[api]
+port = 55437
+
+[db]
+port = 55438
+shadow_port = 55439
+major_version = 17
 
 [db.seed]
 # Dev seeds are NOT applied in the test database: the pgTAP suite creates its

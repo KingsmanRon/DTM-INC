@@ -1,5 +1,7 @@
 "use client";
 
+import { Branding } from "@/lib/branding";
+
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { detectInstallHelpPlatform, isStandaloneMode, trackPwaInstallEvent } from "@/lib/pwa-install";
@@ -89,9 +91,9 @@ export function IOSInstallBanner() {
       }}
     >
       <div style={{ flex: 1 }}>
-        <strong style={{ display: "block", marginBottom: 4 }}>Add DTM to your Home Screen</strong>
+        <strong style={{ display: "block", marginBottom: 4 }}>Add {Branding.appName} to your Home Screen</strong>
         <span>
-          Tap the Share button, then choose Add to Home Screen. This lets you open DTM like an app.
+          Tap the Share button, then choose Add to Home Screen. This lets you open {Branding.appName} like an app.
         </span>
       </div>
       <button

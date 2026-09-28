@@ -17,9 +17,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getPracticeSettings } from "@/lib/practice/settings";
+import { clientDeployment } from "@/lib/branding";
 
 const TTL_MS = 10 * 60_000;
-const BUNDLED_CANDIDATES = [
+const BUNDLED_CANDIDATES = clientDeployment ? [
+  path.join(process.cwd(), "public", "client-brand", "logo-pdf.png"),
+] : [
   path.join(process.cwd(), "public", "brand", "logo-pdf.png"),
   path.join(process.cwd(), "public", "brand", "Dr. T. Mtshali_LOGO - PDF.png"),
 ];

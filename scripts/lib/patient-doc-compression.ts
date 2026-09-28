@@ -4,7 +4,7 @@
 // logged or echoed.
 import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import sharp from "sharp";
+import sharp, { type WebpOptions } from "sharp";
 import { safeStorageName } from "../../src/lib/documents/constants";
 
 export const BUCKET = "patient-documents";
@@ -111,7 +111,7 @@ async function encodeWebp(
       withoutEnlargement: true, // never upscale
     });
 
-  const webpOptions: sharp.WebpOptions = { effort: WEBP_EFFORT, quality: opts.quality };
+  const webpOptions: WebpOptions = { effort: WEBP_EFFORT, quality: opts.quality };
   if (opts.lossless) webpOptions.lossless = true;
   if (opts.nearLossless) webpOptions.nearLossless = true;
 

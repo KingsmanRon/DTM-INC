@@ -41,9 +41,8 @@ export default function manifest(): MetadataRoute.Manifest {
     related_applications: [{ platform: "webapp", url: manifestUrl }],
     prefer_related_applications: false,
     icons: [
-      { src: "/icons/favicon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icons/favicon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icons/favicon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: Branding.icon192, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: Branding.icon512, sizes: "512x512", type: "image/png", purpose: "any" },
     ],
   };
 }

@@ -41,3 +41,10 @@ supabase/.temp
 
 # Business/sales material — never ships with the product repo
 docs/business/
+
+# Operator configuration and generated client bundles stay outside Git.
+client-config/
+client-output/
+.local-validation/
+.playwright-cli/
+output/playwright/

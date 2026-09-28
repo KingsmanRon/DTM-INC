@@ -14,7 +14,7 @@ export default async function AuthedLayout({ children }: { children: React.React
   const session = await resolveSession();
   if (!session) redirect("/login");
 
-  // FR-1: doctor + admin cannot reach authenticated routes without MFA.
+  // Every application role requires MFA before reaching authenticated routes.
   const mfa = await resolveMfa(session.role, "/dashboard", session.userId);
   if (mfa.action === "enrol") redirect("/mfa/enrol");
   if (mfa.action === "challenge") redirect("/mfa/challenge");
@@ -42,8 +42,8 @@ export default async function AuthedLayout({ children }: { children: React.React
           <div className="flex items-center justify-between gap-3">
             <Link href="/dashboard" prefetch={false} className="flex min-w-0 items-center gap-3">
             <Image
-              src="/brand/logo.png"
-              alt="DTM INC. logo"
+              src={Branding.logo}
+              alt={`${practiceName} logo`}
               width={40}
               height={40}
               priority

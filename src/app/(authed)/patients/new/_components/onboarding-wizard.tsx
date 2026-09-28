@@ -137,9 +137,7 @@ const STEPS = [
 
 const CONSENT_SUMMARY_VERSION = "cards-v1";
 
-// Drafts survive a refresh/navigation but NOT closing the tab: sessionStorage
-// is per-tab and discarded with it, which is the right ceiling for PHI on a
-// shared front-desk machine. Cleared on successful submit and by "Start over".
+// Patient drafts stay in memory only. Purge the previous session cache.
 const DRAFT_STORAGE_KEY = "dtm.onboarding.draft.v1";
 
 const ONBOARDING_ERROR_MESSAGES: Record<string, string> = {
@@ -219,39 +217,11 @@ export function OnboardingWizard(props: {
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const [stepErrors, setStepErrors] = useState<string[]>([]);
-  const [restoredDraft, setRestoredDraft] = useState(false);
-  const restoreDone = useRef(false);
   const submitInFlight = useRef(false);
 
   const consentCards = props.consentCards.length > 0 ? props.consentCards : FALLBACK_CONSENT_CARDS;
 
-  // Restore an unsubmitted draft AFTER mount (not in the state initializer) so
-  // server and client first-render markup match — no hydration mismatch.
-  useEffect(() => {
-    if (restoreDone.current) return;
-    restoreDone.current = true;
-    try {
-      const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { version?: number; draft?: Draft } | null;
-      if (parsed?.version === 1 && parsed.draft) {
-        setDraft(parsed.draft);
-        setRestoredDraft(true);
-      }
-    } catch {
-      /* corrupt/absent draft — start clean */
-    }
-  }, []);
-
-  // Persist on every change (a refresh mid-form used to destroy all 7 steps).
-  useEffect(() => {
-    if (!restoreDone.current) return;
-    try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, draft }));
-    } catch {
-      /* storage full/unavailable — the form still works, just without recovery */
-    }
-  }, [draft]);
+  useEffect(() => { clearStoredDraft(); }, []);
 
   function clearStoredDraft() {
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
@@ -267,7 +237,6 @@ export function OnboardingWizard(props: {
     setStepErrors([]);
     setIssues([]);
     setError(null);
-    setRestoredDraft(false);
   }
 
   function applySameAsPatient(value: boolean) {
@@ -486,11 +455,7 @@ export function OnboardingWizard(props: {
         </button>
       </nav>
 
-      {restoredDraft ? (
-        <p className="text-xs text-text-secondary">
-          Restored your unsubmitted draft from this session. Use “Start over” to discard it.
-        </p>
-      ) : null}
+      <p className="text-xs text-text-secondary">Unsaved details are cleared when you leave or refresh this page.</p>
 
       <div className="card space-y-4">
         {stepErrors.length > 0 ? (

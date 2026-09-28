@@ -21,6 +21,8 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(19);
 
+update public.practice_settings set active_consent_version = '1.0.0', active_consent_body = 'Test consent only';
+
 -- ── Fixtures (as superuser; RLS bypassed by table ownership) ────────────────
 
 insert into auth.users (instance_id, id, aud, role, email)
@@ -57,7 +59,7 @@ values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaa
 -- Impersonation helper: PostgREST sets these GUCs per request.
 create or replace function pg_temp.impersonate(p_uid uuid) returns void language plpgsql as $$
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   perform set_config('request.jwt.claim.sub', p_uid::text, true);
   perform set_config('role', 'authenticated', true);
 end;
@@ -165,7 +167,7 @@ select throws_ok(
        '{"name":"N","relationship":"R","phone":"+27110000003"}'::jsonb,
        '{"referrer_type":"self"}'::jsonb,
        '[]'::jsonb,
-       '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"X Y","patient_present_attestation":"true"}'::jsonb
+       '{"consent_text_version":"1.0.0","consent_text_hash":"21ab6772a7432fc3f7d0b61e97ab35ef61029556a3e00068b7d271414429cbd8","signature_type":"typed_name","signature_value":"X Y","patient_present_attestation":"true"}'::jsonb
      ) $$,
   '42501',
   null,
@@ -187,7 +189,7 @@ select matches(
      '{"name":"N","relationship":"R","phone":"+27110000005"}'::jsonb,
      '{"referrer_type":"self"}'::jsonb,
      '[]'::jsonb,
-     '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"New Patient","patient_present_attestation":"true"}'::jsonb
+     '{"consent_text_version":"1.0.0","consent_text_hash":"21ab6772a7432fc3f7d0b61e97ab35ef61029556a3e00068b7d271414429cbd8","signature_type":"typed_name","signature_value":"New Patient","patient_present_attestation":"true"}'::jsonb
    )),
   '^FOU-',
   'staff onboarding allocates the hospital''s file prefix from public.hospitals'
@@ -202,7 +204,7 @@ select throws_like(
        '{"name":"N","relationship":"R","phone":"+27110000007"}'::jsonb,
        '{"referrer_type":"self"}'::jsonb,
        '[]'::jsonb,
-       '{"consent_text_version":"1.0.0","consent_text_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_type":"typed_name","signature_value":"X Y","patient_present_attestation":"true"}'::jsonb
+       '{"consent_text_version":"1.0.0","consent_text_hash":"21ab6772a7432fc3f7d0b61e97ab35ef61029556a3e00068b7d271414429cbd8","signature_type":"typed_name","signature_value":"X Y","patient_present_attestation":"true"}'::jsonb
      ) $$,
   '%Invalid or inactive hospital%',
   'unknown hospital hard-fails — no silent default prefix'

@@ -1,10 +1,11 @@
+import { Branding } from "@/lib/branding";
 import type { Metadata } from "next";
 import { DemoExperience } from "./_components/demo-experience";
 
 export const metadata: Metadata = {
-  title: "DTM Inc. | Guided product tour",
+  title: `${Branding.appName} | Guided product tour`,
   description:
-    "A guided demonstration of DTM Inc. duplicate prevention, patient onboarding, document attachment and clinical note workflows.",
+    `A guided demonstration of ${Branding.appName} duplicate prevention, patient onboarding, document attachment and clinical note workflows.`,
   robots: {
     index: false,
     follow: false,

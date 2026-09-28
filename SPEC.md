@@ -13,6 +13,22 @@
 
 See the repo's [`README.md`](./README.md) for architecture, quick start, and deployment.
 
+## Reusable practice baseline
+
+The client baseline keeps one legal practice per dedicated Vercel and Supabase
+deployment, with multiple configured facilities inside that practice. It is
+not a tenancy conversion. All application roles require MFA/AAL2 at the page,
+API and database boundaries. No patient drafts or clinical content may be
+persisted for offline use. New practice identity, facilities, consent, initial
+users and deployment branding come from a reviewed configuration, not source
+edits. The original DTM owner decisions below remain historical practice
+decisions, not assumed answers for a new client.
+
+Use [the client runbook](docs/client-onboarding-runbook.md),
+[required information](docs/client-information-required.md) and
+[acceptance checklist](docs/client-go-live-checklist.md). Manual monthly billing
+exports are supported; claims submission, remittance and payments are excluded.
+
 ## §1 Product goal
 A secure, internal-only Progressive Web App that lets DTM Inc. staff:
 1. Capture new patient demographics digitally with a system-generated, unique file number.

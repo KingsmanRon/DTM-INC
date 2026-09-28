@@ -447,7 +447,7 @@ function ReassignHospitalCard({
               className="input"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Onboarded under Nkanyezi in error; patient is admitted at Fountain"
+              placeholder="Explain why the patient needs to move to the selected facility"
               disabled={busy}
             />
           </label>

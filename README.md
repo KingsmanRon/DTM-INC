@@ -2,6 +2,12 @@
 
 Internal-only, POPIA-aligned, single-practice surgical EHR for Dr. Thomas Mtshali Inc., Sebokeng.
 
+For a new practice, use the [client onboarding runbook](docs/client-onboarding-runbook.md),
+[information checklist](docs/client-information-required.md) and
+[environment checklist](docs/client-environment-checklist.md). The baseline
+uses one isolated deployment per legal practice and requires Node 22 and MFA
+for doctor, staff and admin. Do not use the legacy quick start to seed a client.
+
 This repo is the v1. It replaces the paper onboarding form and the `DATE | NOTES` clinical sheet with digital equivalents, generates unique file numbers, and gives the doctor a searchable patient register — without touching third-party claims processing.
 
 ---
@@ -169,7 +175,7 @@ Per §2 / §14 rule 10 / §15 decision #4, the following will not exist in v1 an
 
 - Medical aid claims capture / submission / remittance
 - Any integration with the third-party claims processor
-- Payment processing, billing, invoicing
+- Payment processing and invoicing. Manual per facility monthly billing XLSX export is supported.
 - Patient portal or self-service
 - Appointment scheduling
 - ePrescribing, lab / theatre / imaging integrations

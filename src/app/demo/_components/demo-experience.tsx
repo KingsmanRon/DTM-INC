@@ -1,5 +1,7 @@
 "use client";
 
+import { Branding } from "@/lib/branding";
+
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../demo.module.css";
@@ -9,14 +11,14 @@ const chapters = [
     number: "01",
     short: "Duplicates",
     title: "Stop duplicate files before they start",
-    body: "DTM checks legal identity and opens the existing patient file instead.",
+    body: "The practice checks legal identity and opens the existing patient file instead.",
     aria: "Exact identity duplicate prevention",
   },
   {
     number: "02",
     short: "Onboarding",
     title: "Onboard the complete patient",
-    body: "Seven guided sections keep every intake complete and recoverable.",
+    body: "Seven guided sections help you complete and review every intake.",
     aria: "Complete seven section patient onboarding",
   },
   {
@@ -196,7 +198,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
               paperwork.
             </h1>
             <p className={styles.heroLead}>
-              See how DTM Inc. prevents duplicate files and turns first intake into a complete, defensible patient record.
+              See how {Branding.appName} prevents duplicate files and turns first intake into a complete, defensible patient record.
             </p>
             <button className={styles.scrollButton} type="button" onClick={() => scrollTo("tour")}>
               <Icon name="arrow" />
@@ -222,7 +224,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
       </section>
 
       <section className={styles.story} id="tour" ref={storyRef} aria-labelledby="tour-title">
-        <h2 id="tour-title" className={styles.srOnly}>How the DTM Inc. workflow works</h2>
+        <h2 id="tour-title" className={styles.srOnly}>How the {Branding.appName} workflow works</h2>
         <div className={styles.storyGrid}>
           <div className={styles.storyNarrative}>
             {chapters.map((chapter, index) => (
@@ -301,7 +303,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
         </div>
 
         <footer className={styles.demoFooter}>
-          <span>DTM Inc.</span>
+          <span>{Branding.appName}</span>
           <span>Fictional demonstration data</span>
           <span>No patient information is used on this page</span>
         </footer>
@@ -312,12 +314,12 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
 
 function DemoBrand() {
   return (
-    <div className={styles.brand} aria-label="DTM Inc.">
+    <div className={styles.brand} aria-label={Branding.appName}>
       <span className={styles.brandMark}>
-        <Image src="/brand/logo.png" alt="" width={46} height={46} priority />
+        <Image src={Branding.logo} alt="" width={46} height={46} priority />
       </span>
       <span>
-        <strong>DTM Inc.</strong>
+        <strong>{Branding.appName}</strong>
         <small>Guided product tour</small>
       </span>
     </div>
@@ -453,7 +455,7 @@ function DuplicateStage() {
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
-        <div><h3>Check before creating</h3><p>DTM checks a normalised SA ID or passport before a new patient file is created.</p></div>
+        <div><h3>Check before creating</h3><p>The practice checks a normalised SA ID or passport before a new patient file is created.</p></div>
         <span className={styles.stepCounter}>Identity check</span>
       </div>
       <div className={styles.identityFields}>
@@ -481,7 +483,7 @@ function OnboardingStage() {
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
-        <div><h3>Complete patient onboarding</h3><p>Every required section is reviewed before DTM generates the patient file.</p></div>
+        <div><h3>Complete patient onboarding</h3><p>Every required section is reviewed before the practice generates the patient file.</p></div>
         <span className={styles.stepCounter}>Step 7 of 7</span>
       </div>
       <div className={styles.fullStepper}>
@@ -500,7 +502,7 @@ function OnboardingStage() {
         <CompletionItem label="Consent" value="Signed in person" />
       </div>
       <div className={styles.mockFormFooter}>
-        <span>Draft saved in this session · consent text current</span>
+        <span>Unsaved details stay in memory · consent text current</span>
         <span className={styles.primaryControl} data-cursor-target>Submit and generate file number</span>
       </div>
     </div>
@@ -586,7 +588,7 @@ function CursorShape() {
 
 function TrustPanel() {
   return (
-    <div className={styles.trustPanel} aria-label="How DTM Inc. keeps the record trustworthy">
+    <div className={styles.trustPanel} aria-label={`How ${Branding.appName} keeps the record trustworthy`}>
       <div className={styles.trustPanelHeader}>
         <span className={styles.trustBadge}>Why the record holds up</span>
         <p>Three guarantees run through every workflow in this tour.</p>

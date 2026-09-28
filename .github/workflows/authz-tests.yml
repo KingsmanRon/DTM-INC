@@ -12,11 +12,17 @@ on:
   pull_request:
     paths:
       - "supabase/**"
+      - "scripts/**"
+      - "config/**"
+      - "package*.json"
       - ".github/workflows/authz-tests.yml"
   push:
     branches: ["main", "master", "claude/patient-onboarding-pwa-PFlAh"]
     paths:
       - "supabase/**"
+      - "scripts/**"
+      - "config/**"
+      - "package*.json"
       - ".github/workflows/authz-tests.yml"
 
 jobs:
@@ -30,10 +36,28 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.118.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Start local database (applies all migrations from 0001)
         run: supabase db start
 
       - name: Run pgTAP authz suite
         run: supabase test db
+
+      - name: Verify client bootstrap against empty local database
+        run: npm run test:bootstrap
+
+      - name: Local security advisors
+        run: supabase db advisors --local --type security --fail-on warn
+
+      - name: Database function lint
+        run: supabase db lint --local --schema public,private --fail-on error

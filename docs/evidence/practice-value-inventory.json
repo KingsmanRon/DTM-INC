@@ -1,0 +1,1130 @@
+[
+  {
+    "file": ".env.example",
+    "line": 22,
+    "category": "per-practice configuration",
+    "text": "# Defaults are the DTM values; a new practice sets these in its Vercel project."
+  },
+  {
+    "file": ".env.example",
+    "line": 29,
+    "category": "per-practice configuration",
+    "text": "# See docs/client-environment-checklist.md. Never copy DTM project credentials."
+  },
+  {
+    "file": "README.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "# DTM Inc. — Patient Onboarding & Records PWA"
+  },
+  {
+    "file": "README.md",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "Internal-only, POPIA-aligned, single-practice surgical EHR for Dr. Thomas Mtshali Inc., Sebokeng."
+  },
+  {
+    "file": "README.md",
+    "line": 128,
+    "category": "branding asset",
+    "text": "├── icons/favicon.svg          # DTM mark — designer-replace per §16"
+  },
+  {
+    "file": "README.md",
+    "line": 197,
+    "category": "per-practice configuration",
+    "text": "Proprietary. Internal to DTM Inc. / Inntris. Not for redistribution."
+  },
+  {
+    "file": "SPEC.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "# DTM Inc. — Patient Onboarding & Records PWA"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "**Practice:** Dr. Thomas Mtshali Inc. — Specialist Laparoscopic and General Surgeon"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 4,
+    "category": "per-practice configuration",
+    "text": "**Location:** Clinix Naledi-Nkanyezi Private Hospital, 1 Moshoeshoe Street, Sebokeng 1982"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 5,
+    "category": "per-practice configuration",
+    "text": "**Contact:** 016 420-3160"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 6,
+    "category": "per-practice configuration",
+    "text": "**Practice number:** PR. No. 1144286"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 10,
+    "category": "per-practice configuration",
+    "text": "**Information Officer:** Dr. Thomas Mtshali"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 24,
+    "category": "per-practice configuration",
+    "text": "edits. The original DTM owner decisions below remain historical practice"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 33,
+    "category": "per-practice configuration",
+    "text": "A secure, internal-only Progressive Web App that lets DTM Inc. staff:"
+  },
+  {
+    "file": "SPEC.md",
+    "line": 51,
+    "category": "per-practice configuration",
+    "text": "| 6 | Brand colours? | **Inntris palette as base; DTM green as accent. Sample green from a 600dpi flatbed scan.** |"
+  },
+  {
+    "file": "docs/internal/audit-chain-runbook.md",
+    "line": 28,
+    "category": "per-practice configuration",
+    "text": "was a migration applied mid-window?)."
+  },
+  {
+    "file": "docs/internal/client-decisions-template.md",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "SPEC.md §15 captures decisions locked with Dr. Mtshali. They are PER-PRACTICE."
+  },
+  {
+    "file": "docs/internal/client-decisions-template.md",
+    "line": 7,
+    "category": "per-practice configuration",
+    "text": "| # | Question | DTM's answer (reference) | THIS CLIENT's answer | Signed off |"
+  },
+  {
+    "file": "docs/internal/client-decisions-template.md",
+    "line": 13,
+    "category": "per-practice configuration",
+    "text": "| 5 | Information Officer registered + named? | Dr. Mtshali | | ☐ |"
+  },
+  {
+    "file": "docs/internal/client-decisions-template.md",
+    "line": 14,
+    "category": "per-practice configuration",
+    "text": "| 6 | Hospitals + file-number prefixes (drives public.hospitals) | NKA/FOU/MED/MID | | ☐ |"
+  },
+  {
+    "file": "docs/internal/client-decisions-template.md",
+    "line": 15,
+    "category": "branding asset",
+    "text": "| 7 | Brand: name, logo assets, colours | DTM green | | ☐ |"
+  },
+  {
+    "file": "docs/internal/handover-architecture.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "# DTM PWA Handover Architecture"
+  },
+  {
+    "file": "docs/internal/handover-architecture.md",
+    "line": 4,
+    "category": "per-practice configuration",
+    "text": "DTM is a Next.js 15 App Router PWA deployed on Vercel, backed by Supabase (Postgres/Auth/Storage), with POPIA-aligned role-based access and an append-only hash-chained audit trail."
+  },
+  {
+    "file": "docs/internal/new-practice-deployment-runbook.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA."
+  },
+  {
+    "file": "docs/internal/new-practice-deployment-runbook.md",
+    "line": 14,
+    "category": "per-practice configuration",
+    "text": "- [ ] Sanitized repo (no DTM patient data, no DTM secrets) is the deployment source."
+  },
+  {
+    "file": "docs/internal/new-practice-deployment-runbook.md",
+    "line": 23,
+    "category": "per-practice configuration",
+    "text": "DTM hospitals with the client's:"
+  },
+  {
+    "file": "docs/internal/new-practice-deployment-runbook.md",
+    "line": 34,
+    "category": "per-practice configuration",
+    "text": "consent_cards (0051), privacy_notice_body. The 0001 defaults are DTM's —"
+  },
+  {
+    "file": "docs/internal/promote-auth-user-to-app-admin.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA."
+  },
+  {
+    "file": "docs/internal/promote-auth-user-to-app-admin.md",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "# Promote a Supabase Auth user to DTM app admin"
+  },
+  {
+    "file": "docs/internal/promote-auth-user-to-app-admin.md",
+    "line": 10,
+    "category": "per-practice configuration",
+    "text": "2. **DTM app admin role**"
+  },
+  {
+    "file": "docs/internal/test-data-hard-delete.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA."
+  },
+  {
+    "file": "docs/internal/v2-fix-plan.md",
+    "line": 14,
+    "category": "per-practice configuration",
+    "text": "- **Prod risk:** risk of disturbing the LIVE DTM deployment."
+  },
+  {
+    "file": "docs/internal/v2-fix-plan.md",
+    "line": 50,
+    "category": "per-practice configuration",
+    "text": "| 31 | Consent cards from `practice_settings.consent_cards` (admin-editable; DTM wording as default) | S–M | Low | 0051 | Implemented |"
+  },
+  {
+    "file": "docs/internal/vault-setup.md",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "> Historical DTM operations reference. For a new practice, use [the client runbook](../client-onboarding-runbook.md). Secret administration and destructive cleanup now require the private schema and operator access. All app roles require MFA."
+  },
+  {
+    "file": "package.json",
+    "line": 2,
+    "category": "global product behaviour",
+    "text": "\"name\": \"dtm-inc-pwa\","
+  },
+  {
+    "file": "package.json",
+    "line": 5,
+    "category": "global product behaviour",
+    "text": "\"description\": \"DTM Inc. — Patient Onboarding & Records PWA. POPIA-aligned, single-practice surgical EHR.\","
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 3,
+    "category": "branding asset",
+    "text": "Per §16 of the spec. This folder holds the final SVG lockups once the designer has recreated them from a 600dpi flatbed scan of the DTM Inc. business card."
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 9,
+    "category": "branding asset",
+    "text": "| `dtm_mark.svg` | Circle mark + scalpel only. For favicon, small surfaces. |"
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 10,
+    "category": "branding asset",
+    "text": "| `dtm_lockup.svg` | Mark + wordmark. For app header. |"
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 11,
+    "category": "branding asset",
+    "text": "| `dtm_mark_reversed.svg` | White-on-dark version for dark surfaces. |"
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 12,
+    "category": "branding asset",
+    "text": "| `dtm_lockup_reversed.svg` | White-on-dark version for dark surfaces. |"
+  },
+  {
+    "file": "public/brand/README.md",
+    "line": 19,
+    "category": "branding asset",
+    "text": "- `tailwind.config.ts` → `colors[\"accent-dtm-green\"]`"
+  },
+  {
+    "file": "scripts/lib/client-config.test.ts",
+    "line": 51,
+    "category": "test/demo fixture",
+    "text": "it(\"generates a client profile with no credentials or DTM fallback\", () => {"
+  },
+  {
+    "file": "scripts/lib/client-config.test.ts",
+    "line": 55,
+    "category": "test/demo fixture",
+    "text": "expect(env).not.toMatch(/DTM|Mtshali|SERVICE_ROLE_KEY|CRON_SECRET/);"
+  },
+  {
+    "file": "src/app/(authed)/patients/[id]/_components/patient-tabs.tsx",
+    "line": 37,
+    "category": "global product behaviour",
+    "text": "? \"border-accent-dtm-green text-white\""
+  },
+  {
+    "file": "src/app/(authed)/patients/new/_components/onboarding-wizard.tsx",
+    "line": 141,
+    "category": "global product behaviour",
+    "text": "const DRAFT_STORAGE_KEY = \"dtm.onboarding.draft.v1\";"
+  },
+  {
+    "file": "src/app/(authed)/patients/new/_components/onboarding-wizard.tsx",
+    "line": 442,
+    "category": "global product behaviour",
+    "text": "? \"bg-accent-dtm-green border-accent-dtm-green text-white\""
+  },
+  {
+    "file": "src/app/api/v1/admin/break-glass/[id]/access/route.ts",
+    "line": 72,
+    "category": "per-practice configuration",
+    "text": "//    dropped by the network, or an attacker injects a panic mid-flight,"
+  },
+  {
+    "file": "src/app/api/v1/patients/[id]/reassign-hospital/route.ts",
+    "line": 2,
+    "category": "per-practice configuration",
+    "text": "// the wrong hospital (e.g. an NKA file that should be FOU)."
+  },
+  {
+    "file": "src/app/api/v1/patients/[id]/route.ts",
+    "line": 99,
+    "category": "per-practice configuration",
+    "text": "// implementation updated five tables sequentially: a mid-sequence failure"
+  },
+  {
+    "file": "src/app/globals.css",
+    "line": 55,
+    "category": "global product behaviour",
+    "text": "@apply inline-flex items-center justify-center rounded px-4 py-2 bg-accent-dtm-green text-white font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed;"
+  },
+  {
+    "file": "src/app/health/route.ts",
+    "line": 5,
+    "category": "global product behaviour",
+    "text": "return new Response(JSON.stringify({ status: \"ok\", service: \"dtm-inc-pwa\", ts: new Date().toISOString() }), {"
+  },
+  {
+    "file": "src/app/manifest.ts",
+    "line": 38,
+    "category": "per-practice configuration",
+    "text": "// for users who have already added DTM to their home screen / desktop."
+  },
+  {
+    "file": "src/components/AndroidInstallButton.tsx",
+    "line": 29,
+    "category": "per-practice configuration",
+    "text": "// a DTM shortcut on their home screen / desktop. In that case there is"
+  },
+  {
+    "file": "src/components/IOSInstallBanner.tsx",
+    "line": 9,
+    "category": "global product behaviour",
+    "text": "const DISMISS_KEY = \"dtm-ios-install-dismissal\";"
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 71,
+    "category": "test/demo fixture",
+    "text": "expect(hospitalSlug(\"Nkanyezi Private Hospital\")).toBe(\"nkanyezi\");"
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 72,
+    "category": "test/demo fixture",
+    "text": "expect(hospitalSlug(\"Mediclinic Vereeniging Hospital\")).toBe(\"mediclinic-vereeniging\");"
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 73,
+    "category": "test/demo fixture",
+    "text": "expect(hospitalSlug(\"Fountain Private Hospital\")).toBe(\"fountain\");"
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 74,
+    "category": "test/demo fixture",
+    "text": "expect(hospitalSlug(\"Midvaal Private Hospital\")).toBe(\"midvaal\");"
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 77,
+    "category": "test/demo fixture",
+    "text": "expect(billingFilename(\"Nkanyezi Private Hospital\", \"2026-06\")).toBe("
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 78,
+    "category": "test/demo fixture",
+    "text": "\"billing-export-nkanyezi-2026-06.xlsx\","
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 80,
+    "category": "test/demo fixture",
+    "text": "expect(billingFilename(\"Mediclinic Vereeniging Hospital\", \"2026-06-01\")).toBe("
+  },
+  {
+    "file": "src/lib/billing/format.test.ts",
+    "line": 81,
+    "category": "test/demo fixture",
+    "text": "\"billing-export-mediclinic-vereeniging-2026-06.xlsx\","
+  },
+  {
+    "file": "src/lib/billing/format.ts",
+    "line": 74,
+    "category": "per-practice configuration",
+    "text": "//   \"Nkanyezi Private Hospital\"        -> \"nkanyezi\""
+  },
+  {
+    "file": "src/lib/billing/format.ts",
+    "line": 75,
+    "category": "per-practice configuration",
+    "text": "//   \"Mediclinic Vereeniging Hospital\"  -> \"mediclinic-vereeniging\""
+  },
+  {
+    "file": "src/lib/billing/format.ts",
+    "line": 87,
+    "category": "per-practice configuration",
+    "text": "// billing-export-nkanyezi-2026-06.xlsx"
+  },
+  {
+    "file": "src/lib/billing/rows.test.ts",
+    "line": 6,
+    "category": "test/demo fixture",
+    "text": "file_number: \"NKA-2026-000123\","
+  },
+  {
+    "file": "src/lib/billing/rows.test.ts",
+    "line": 33,
+    "category": "test/demo fixture",
+    "text": "expect(row[0]).toBe(\"NKA-2026-000123\");"
+  },
+  {
+    "file": "src/lib/billing/xlsx.test.ts",
+    "line": 11,
+    "category": "test/demo fixture",
+    "text": "[\"NKA-2026-000123\", \"MBUYISWA J NHLAPO\", \"8001015009087\"],"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 4,
+    "category": "per-practice configuration",
+    "text": "// at build time) with the current DTM values as defaults, so the existing"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 19,
+    "category": "per-practice configuration",
+    "text": "appName: process.env.NEXT_PUBLIC_APP_NAME ?? (clientDeployment ? \"Practice\" : \"DTM Inc.\"),"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 21,
+    "category": "per-practice configuration",
+    "text": "appTitle: process.env.NEXT_PUBLIC_APP_TITLE ?? (clientDeployment ? \"Patient Records\" : \"DTM Inc. — Patient Records\"),"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 25,
+    "category": "per-practice configuration",
+    "text": "(clientDeployment ? \"Internal practice system.\" : \"Dr. Thomas Mtshali Inc. — Specialist Laparoscopic and General Surgeon. Internal staff system.\"),"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 27,
+    "category": "per-practice configuration",
+    "text": "mfaIssuer: process.env.NEXT_PUBLIC_APP_NAME ?? (clientDeployment ? \"Practice\" : \"DTM Inc\"),"
+  },
+  {
+    "file": "src/lib/branding.ts",
+    "line": 29,
+    "category": "branding asset",
+    "text": "watermark: assetBase ? `${assetBase}/logo.png` : \"/brand/Dr. T. Mtshali_LOGO - PDF.png\","
+  },
+  {
+    "file": "src/lib/pdf/logo.ts",
+    "line": 9,
+    "category": "branding asset",
+    "text": "//   3. public/brand/Dr. T. Mtshali_LOGO - PDF.png — the original DTM asset,"
+  },
+  {
+    "file": "src/lib/pdf/logo.ts",
+    "line": 12,
+    "category": "branding asset",
+    "text": "// Previously both PDF libs did a module-load readFileSync of the DTM filename:"
+  },
+  {
+    "file": "src/lib/pdf/logo.ts",
+    "line": 27,
+    "category": "branding asset",
+    "text": "path.join(process.cwd(), \"public\", \"brand\", \"Dr. T. Mtshali_LOGO - PDF.png\"),"
+  },
+  {
+    "file": "src/lib/pwa-install.ts",
+    "line": 18,
+    "category": "per-practice configuration",
+    "text": "// already has a DTM shortcut on their home screen / desktop. Unlike"
+  },
+  {
+    "file": "src/lib/pwa-install.ts",
+    "line": 73,
+    "category": "global product behaviour",
+    "text": "window.dispatchEvent(new CustomEvent(\"dtm:pwa-install-event\", { detail: { eventName, ...safeMetadata } }));"
+  },
+  {
+    "file": "src/lib/supabase/admin.ts",
+    "line": 23,
+    "category": "global product behaviour",
+    "text": "global: { headers: { \"x-dtm-service-client\": \"true\" } },"
+  },
+  {
+    "file": "src/lib/validation/onboarding-payload.test.ts",
+    "line": 10,
+    "category": "test/demo fixture",
+    "text": "hospital: \"Nkanyezi Private Hospital\","
+  },
+  {
+    "file": "src/lib/validation/onboarding-payload.test.ts",
+    "line": 19,
+    "category": "test/demo fixture",
+    "text": "address: \"1 Test Street, Sebokeng\","
+  },
+  {
+    "file": "src/lib/validation/onboarding-payload.test.ts",
+    "line": 31,
+    "category": "test/demo fixture",
+    "text": "home_address: \"1 Test Street, Sebokeng\","
+  },
+  {
+    "file": "supabase/functions/write_audit_entry.sql",
+    "line": 32,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/functions/write_audit_entry_atomic.sql",
+    "line": 33,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "-- DTM Inc. PWA — initial schema"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 62,
+    "category": "per-practice configuration",
+    "text": "('doctor', 'Dr. Thomas Mtshali — sole clinician. Read/write clinical notes.'),"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 377,
+    "category": "per-practice configuration",
+    "text": "practice_name           text not null default 'Dr. Thomas Mtshali Inc.',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 379,
+    "category": "per-practice configuration",
+    "text": "practice_number         text not null default '1144286',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 380,
+    "category": "per-practice configuration",
+    "text": "doctor_name             text not null default 'Dr. Thomas Mtshali',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 381,
+    "category": "per-practice configuration",
+    "text": "doctor_qualifications   text not null default 'MBBCh, BSc (Lab Med) (WITS), FCS (SA), MMed (SMU)',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 382,
+    "category": "per-practice configuration",
+    "text": "practice_address        text not null default 'Clinix Naledi-Nkanyezi Private Hospital, 1 Moshoeshoe Street, Sebokeng 1982',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 383,
+    "category": "per-practice configuration",
+    "text": "practice_phone          text not null default '016 420-3160',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 385,
+    "category": "per-practice configuration",
+    "text": "file_number_prefix      text not null default 'DTM',"
+  },
+  {
+    "file": "supabase/migrations/0001_init_schema.sql",
+    "line": 389,
+    "category": "per-practice configuration",
+    "text": "information_officer_name  text not null default 'Dr. Thomas Mtshali',"
+  },
+  {
+    "file": "supabase/migrations/0006_hardening.sql",
+    "line": 68,
+    "category": "global product behaviour",
+    "text": "perform pg_advisory_xact_lock(hashtext('dtm_audit_chain'));"
+  },
+  {
+    "file": "supabase/migrations/0012_practice_qualifications_smu.sql",
+    "line": 2,
+    "category": "per-practice configuration",
+    "text": "-- The 0001 schema default already reads \"MMed (SMU)\", but rows seeded"
+  },
+  {
+    "file": "supabase/migrations/0012_practice_qualifications_smu.sql",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "-- with the older \"MMed (SMU)\" value need to be corrected so the"
+  },
+  {
+    "file": "supabase/migrations/0012_practice_qualifications_smu.sql",
+    "line": 6,
+    "category": "per-practice configuration",
+    "text": "set doctor_qualifications = 'MBBCh, BSc (Lab Med) (WITS), FCS (SA), MMed (SMU)'"
+  },
+  {
+    "file": "supabase/migrations/0012_practice_qualifications_smu.sql",
+    "line": 8,
+    "category": "per-practice configuration",
+    "text": "and doctor_qualifications = 'MBBCh, BSc (Lab Med) (WITS), FCS (SA), MMed (SMU)';"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 9,
+    "category": "per-practice configuration",
+    "text": "set hospital = coalesce(hospital, 'Nkanyezi Private Hospital')"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 21,
+    "category": "per-practice configuration",
+    "text": "'Nkanyezi Private Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 22,
+    "category": "per-practice configuration",
+    "text": "'Fountain Private Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 23,
+    "category": "per-practice configuration",
+    "text": "'Mediclinic Vereeniging Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 24,
+    "category": "per-practice configuration",
+    "text": "'Midvaal Private Hospital'"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 51,
+    "category": "per-practice configuration",
+    "text": "'Nkanyezi Private Hospital', 'NKA',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 52,
+    "category": "per-practice configuration",
+    "text": "'Fountain Private Hospital', 'FOU',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 53,
+    "category": "per-practice configuration",
+    "text": "'Mediclinic Vereeniging Hospital', 'MED',"
+  },
+  {
+    "file": "supabase/migrations/0013_patient_hospital_prefix.sql",
+    "line": 54,
+    "category": "per-practice configuration",
+    "text": "'Midvaal Private Hospital', 'MID'"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "-- One-time legacy backfill: convert existing DTM-prefixed file numbers"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 10,
+    "category": "per-practice configuration",
+    "text": "'^DTM-',"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 12,
+    "category": "per-practice configuration",
+    "text": "when 'Nkanyezi Private Hospital' then 'NKA-'"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 13,
+    "category": "per-practice configuration",
+    "text": "when 'Fountain Private Hospital' then 'FOU-'"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 14,
+    "category": "per-practice configuration",
+    "text": "when 'Mediclinic Vereeniging Hospital' then 'MED-'"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 15,
+    "category": "per-practice configuration",
+    "text": "when 'Midvaal Private Hospital' then 'MID-'"
+  },
+  {
+    "file": "supabase/migrations/0014_backfill_legacy_file_prefixes.sql",
+    "line": 19,
+    "category": "per-practice configuration",
+    "text": "where p.file_number like 'DTM-%'"
+  },
+  {
+    "file": "supabase/migrations/0015_file_sequence_by_year_prefix.sql",
+    "line": 7,
+    "category": "per-practice configuration",
+    "text": "set prefix = 'DTM'"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 5,
+    "category": "per-practice configuration",
+    "text": "--       NKA, FOU, MED, MID"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 6,
+    "category": "per-practice configuration",
+    "text": "--   * Legacy rows that cannot be mapped from patients.hospital (including historical DTM-* rows"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 31,
+    "category": "per-practice configuration",
+    "text": "when 'Nkanyezi Private Hospital' then 'NKA'"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 32,
+    "category": "per-practice configuration",
+    "text": "when 'Fountain Private Hospital' then 'FOU'"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 33,
+    "category": "per-practice configuration",
+    "text": "when 'Mediclinic Vereeniging Hospital' then 'MED'"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 34,
+    "category": "per-practice configuration",
+    "text": "when 'Midvaal Private Hospital' then 'MID'"
+  },
+  {
+    "file": "supabase/migrations/0016_rebuild_file_numbers_by_prefix_year.sql",
+    "line": 49,
+    "category": "per-practice configuration",
+    "text": "where s.prefix in ('NKA', 'FOU', 'MED', 'MID')"
+  },
+  {
+    "file": "supabase/migrations/0017_minor_identity_guardrails.sql",
+    "line": 99,
+    "category": "per-practice configuration",
+    "text": "\"Nkanyezi Private Hospital\": \"NKA\","
+  },
+  {
+    "file": "supabase/migrations/0017_minor_identity_guardrails.sql",
+    "line": 100,
+    "category": "per-practice configuration",
+    "text": "\"Fountain Private Hospital\": \"FOU\","
+  },
+  {
+    "file": "supabase/migrations/0017_minor_identity_guardrails.sql",
+    "line": 101,
+    "category": "per-practice configuration",
+    "text": "\"Mediclinic Vereeniging Hospital\": \"MED\","
+  },
+  {
+    "file": "supabase/migrations/0017_minor_identity_guardrails.sql",
+    "line": 102,
+    "category": "per-practice configuration",
+    "text": "\"Midvaal Private Hospital\": \"MID\""
+  },
+  {
+    "file": "supabase/migrations/0019_reassert_write_audit_entry_security.sql",
+    "line": 30,
+    "category": "global product behaviour",
+    "text": "perform pg_advisory_xact_lock(hashtext('dtm_audit_chain'));"
+  },
+  {
+    "file": "supabase/migrations/0024_audit_lock_non_blocking.sql",
+    "line": 49,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/migrations/0030_atomic_audit_lock_key_compat.sql",
+    "line": 13,
+    "category": "global product behaviour",
+    "text": "-- write_audit_entry_atomic to take the existing legacy key ('dtm_audit_chain')"
+  },
+  {
+    "file": "supabase/migrations/0030_atomic_audit_lock_key_compat.sql",
+    "line": 45,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/migrations/0032_reassert_atomic_audit_execute.sql",
+    "line": 24,
+    "category": "global product behaviour",
+    "text": "-- definition (legacy 'dtm_audit_chain' advisory key, identical to 0030), the"
+  },
+  {
+    "file": "supabase/migrations/0032_reassert_atomic_audit_execute.sql",
+    "line": 98,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/migrations/0036_billing_export_items.sql",
+    "line": 62,
+    "category": "per-practice configuration",
+    "text": "'Nkanyezi Private Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0036_billing_export_items.sql",
+    "line": 63,
+    "category": "per-practice configuration",
+    "text": "'Fountain Private Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0036_billing_export_items.sql",
+    "line": 64,
+    "category": "per-practice configuration",
+    "text": "'Mediclinic Vereeniging Hospital',"
+  },
+  {
+    "file": "supabase/migrations/0036_billing_export_items.sql",
+    "line": 65,
+    "category": "per-practice configuration",
+    "text": "'Midvaal Private Hospital'"
+  },
+  {
+    "file": "supabase/migrations/0040_allocate_file_number_consume_reservations.sql",
+    "line": 3,
+    "category": "per-practice configuration",
+    "text": "-- public.file_number_reservations holds pre-approved, verified-clean slots (e.g. FOU/2026/32,"
+  },
+  {
+    "file": "supabase/migrations/0040_allocate_file_number_consume_reservations.sql",
+    "line": 4,
+    "category": "per-practice configuration",
+    "text": "-- NKA/2026/128) meant to backfill gaps. The table was inert until now; this teaches"
+  },
+  {
+    "file": "supabase/migrations/0044_hospitals_table.sql",
+    "line": 37,
+    "category": "per-practice configuration",
+    "text": "('Nkanyezi Private Hospital',         'NKA', 10),"
+  },
+  {
+    "file": "supabase/migrations/0044_hospitals_table.sql",
+    "line": 38,
+    "category": "per-practice configuration",
+    "text": "('Fountain Private Hospital',         'FOU', 20),"
+  },
+  {
+    "file": "supabase/migrations/0044_hospitals_table.sql",
+    "line": 39,
+    "category": "per-practice configuration",
+    "text": "('Mediclinic Vereeniging Hospital',   'MED', 30),"
+  },
+  {
+    "file": "supabase/migrations/0044_hospitals_table.sql",
+    "line": 40,
+    "category": "per-practice configuration",
+    "text": "('Midvaal Private Hospital',          'MID', 40)"
+  },
+  {
+    "file": "supabase/migrations/0048_audit_chain_position.sql",
+    "line": 107,
+    "category": "global product behaviour",
+    "text": "if not pg_try_advisory_xact_lock(hashtext('dtm_audit_chain')) then"
+  },
+  {
+    "file": "supabase/migrations/0051_consent_cards_settings.sql",
+    "line": 6,
+    "category": "per-practice configuration",
+    "text": "-- Dr. Thomas Mtshali in their wording — a repackaging blocker for any other"
+  },
+  {
+    "file": "supabase/migrations/0051_consent_cards_settings.sql",
+    "line": 9,
+    "category": "per-practice configuration",
+    "text": "-- DTM deployment renders identically with zero data changes."
+  },
+  {
+    "file": "supabase/migrations/0051_consent_cards_settings.sql",
+    "line": 22,
+    "category": "per-practice configuration",
+    "text": "\"body\": \"I consent to consultation, examination and treatment by Dr. Thomas Mtshali and to such investigations and procedures as may, in his clinical judgement, be reasonably necessary for my care. I understand that separate, specific consent will be obtained before any surgical or invasive procedure.\""
+  },
+  {
+    "file": "supabase/migrations/0051_consent_cards_settings.sql",
+    "line": 27,
+    "category": "per-practice configuration",
+    "text": "\"body\": \"I authorise Dr. Thomas Mtshali Inc. (\\\"the Practice\\\") to collect, store, use and share my personal and health information for care, lawful record-keeping, and authorised administration. Under POPIA I have rights of access and correction, subject to lawful retention requirements.\""
+  },
+  {
+    "file": "supabase/migrations/0053_reassign_patient_hospital.sql",
+    "line": 4,
+    "category": "per-practice configuration",
+    "text": "-- INCIDENT DRIVER (2026-06-11): a patient was onboarded under Nkanyezi (NKA"
+  },
+  {
+    "file": "supabase/migrations/0053_reassign_patient_hospital.sql",
+    "line": 5,
+    "category": "per-practice configuration",
+    "text": "-- file number) but actually belongs to Fountain (FOU). Hospital was made"
+  },
+  {
+    "file": "supabase/migrations/0053_reassign_patient_hospital.sql",
+    "line": 184,
+    "category": "per-practice configuration",
+    "text": "--   1. As staff: reassign a test patient NKA -> FOU; new number is FOU-…;"
+  },
+  {
+    "file": "supabase/migrations/0053_reassign_patient_hospital.sql",
+    "line": 186,
+    "category": "per-practice configuration",
+    "text": "--      file_number_reservations; pending billing rows under NKA are gone."
+  },
+  {
+    "file": "supabase/migrations/0055_patient_documents_compression_tracking.sql",
+    "line": 92,
+    "category": "per-practice configuration",
+    "text": "-- a mid-flight state (in_progress/uploaded/verified) are returned as-is so the"
+  },
+  {
+    "file": "supabase/remediation/duplicate_patient_identity_cleanup.sql",
+    "line": 119,
+    "category": "per-practice configuration",
+    "text": "--   v_keep_file_number := 'NKA-2026-000001';"
+  },
+  {
+    "file": "supabase/remediation/duplicate_patient_identity_cleanup.sql",
+    "line": 120,
+    "category": "per-practice configuration",
+    "text": "--   v_duplicate_file_number := 'NKA-2026-000128';"
+  },
+  {
+    "file": "supabase/remediation/duplicate_patient_identity_cleanup.sql",
+    "line": 132,
+    "category": "per-practice configuration",
+    "text": "v_keep_file_number text := null; -- e.g. 'NKA-2026-000001'"
+  },
+  {
+    "file": "supabase/remediation/duplicate_patient_identity_cleanup.sql",
+    "line": 133,
+    "category": "per-practice configuration",
+    "text": "v_duplicate_file_number text := null; -- e.g. 'NKA-2026-000128'"
+  },
+  {
+    "file": "supabase/seed.sql",
+    "line": 1,
+    "category": "per-practice configuration",
+    "text": "-- Automatic seeds are disabled. The original DTM consent/contact seed is retired."
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 42,
+    "category": "test/demo fixture",
+    "text": "('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'NKA-2026-900001', 'Nkanyezi Private Hospital', 'Mr', 'Test', 'Patient', '8001015009087', 'sa_id', '+27110000000', '1 Test Street'),"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 43,
+    "category": "test/demo fixture",
+    "text": "('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'NKA-2026-900002', 'Nkanyezi Private Hospital', 'Mr', 'Archived', 'Patient', '8001015009088', 'sa_id', '+27110000001', '2 Test Street');"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 164,
+    "category": "test/demo fixture",
+    "text": "'{\"hospital\":\"Nkanyezi Private Hospital\",\"title\":\"Mr\",\"first_names\":\"X\",\"surname\":\"Y\",\"id_type\":\"sa_id\",\"id_number\":\"8001015009087\",\"phone\":\"+27110000002\",\"address\":\"3 Street\"}'::jsonb,"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 186,
+    "category": "test/demo fixture",
+    "text": "'{\"hospital\":\"Fountain Private Hospital\",\"title\":\"Mr\",\"first_names\":\"New\",\"surname\":\"Patient\",\"id_type\":\"sa_id\",\"id_number\":\"9001015009086\",\"phone\":\"+27110000004\",\"address\":\"4 Street\"}'::jsonb,"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 194,
+    "category": "test/demo fixture",
+    "text": "'^FOU-',"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 239,
+    "category": "test/demo fixture",
+    "text": "'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 251,
+    "category": "test/demo fixture",
+    "text": "'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 252,
+    "category": "test/demo fixture",
+    "text": "'Onboarded under Nkanyezi in error; patient admits at Fountain')),"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 253,
+    "category": "test/demo fixture",
+    "text": "'^FOU-',"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 259,
+    "category": "test/demo fixture",
+    "text": "'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Fountain Private Hospital',"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 271,
+    "category": "test/demo fixture",
+    "text": "and old_file_number = 'NKA-2026-900001'"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 272,
+    "category": "test/demo fixture",
+    "text": "and new_hospital = 'Fountain Private Hospital'),"
+  },
+  {
+    "file": "supabase/tests/authz.test.sql",
+    "line": 279,
+    "category": "test/demo fixture",
+    "text": "where prefix = 'NKA' and year = 2026 and seq = 900001"
+  },
+  {
+    "file": "supabase/tests/client_security.test.sql",
+    "line": 31,
+    "category": "test/demo fixture",
+    "text": "values('20000000-0000-0000-0000-000000000001','SEC-2026-000001','Nkanyezi Private Hospital','Mr',"
+  },
+  {
+    "file": "supabase/tests/client_security.test.sql",
+    "line": 55,
+    "category": "test/demo fixture",
+    "text": "select throws_ok($$select public.stage_billing_export_items('10000000-0000-0000-0000-000000000002','Nkanyezi Private Hospital','2026-01-01','{}')$$,'42501',null,'doctor cannot spoof billing actor');"
+  },
+  {
+    "file": "supabase/tests/client_security.test.sql",
+    "line": 66,
+    "category": "test/demo fixture",
+    "text": "select throws_ok($$select public.stage_billing_export_items('10000000-0000-0000-0000-000000000001','Nkanyezi Private Hospital','2026-01-01','{}')$$,'42501',null,'staff cannot spoof billing actor');"
+  },
+  {
+    "file": "supabase/tests/client_security.test.sql",
+    "line": 79,
+    "category": "test/demo fixture",
+    "text": "select throws_ok($$select public.stage_billing_export_items('10000000-0000-0000-0000-000000000003','Nkanyezi Private Hospital','2026-01-01','{}')$$,'42501',null,'admin cannot stage billing');"
+  },
+  {
+    "file": "supabase/tests/client_security.test.sql",
+    "line": 92,
+    "category": "test/demo fixture",
+    "text": "select throws_ok($$select public.stage_billing_export_items('10000000-0000-0000-0000-000000000002','Nkanyezi Private Hospital','2026-01-01','{}')$$,'42501',null,'AAL1 staff cannot stage billing');"
+  },
+  {
+    "file": "tailwind.config.ts",
+    "line": 16,
+    "category": "per-practice configuration",
+    "text": "// DTM Inc. practice accent — PLACEHOLDER until flatbed scan is sampled (§16)."
+  },
+  {
+    "file": "tailwind.config.ts",
+    "line": 18,
+    "category": "global product behaviour",
+    "text": "\"accent-dtm-green\": \"#2E7D32\","
+  },
+  {
+    "file": "public/brand/logo.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/brand/Dr. T. Mtshali_LOGO - PDF.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/icons/favicon.ico",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/icons/favicon-192x192.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/icons/favicon-512x512.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/icons/apple-touch-icon.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/favicon.ico",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  },
+  {
+    "file": "public/apple-touch-icon.png",
+    "line": 0,
+    "category": "branding asset",
+    "text": "Legacy DTM binary asset; excluded from client staging"
+  }
+]

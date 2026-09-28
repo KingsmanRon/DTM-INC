@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "project_ref": "abcdefghijklmnopqrst",
+  "practice": {
+    "practice_name": "SUPPLY_LEGAL_DISPLAY_NAME",
+    "practice_tagline": "SUPPLY_SPECIALITY",
+    "practice_number": "SUPPLY_PRACTICE_NUMBER",
+    "doctor_name": "SUPPLY_DOCTOR_NAME",
+    "doctor_qualifications": "SUPPLY_QUALIFICATIONS",
+    "practice_address": "SUPPLY_PRIMARY_ADDRESS",
+    "practice_phone": "SUPPLY_PRACTICE_PHONE",
+    "information_officer_name": "SUPPLY_IO_NAME",
+    "information_officer_email": "owner@example.invalid",
+    "privacy_notice_body": "SUPPLY_APPROVED_PRIVACY_NOTICE",
+    "active_consent_version": "SUPPLY_CONSENT_VERSION",
+    "active_consent_body": "SUPPLY_APPROVED_FULL_CONSENT",
+    "consent_cards": [{ "badge": "A", "title": "SUPPLY_SUMMARY_TITLE", "body": "SUPPLY_APPROVED_SUMMARY" }],
+    "logo_path": "letterhead.png",
+    "file_number_prefix": "XX",
+    "file_number_format": "{PREFIX}-{YYYY}-{SEQ:06}"
+  },
+  "facilities": [{ "name": "SUPPLY_EXACT_FACILITY_NAME", "file_prefix": "XX", "display_order": 10, "active": true }],
+  "initial_sequences": [],
+  "initial_users": [
+    { "full_name": "SUPPLY_ADMIN_NAME", "email": "admin@example.invalid", "role": "admin" },
+    { "full_name": "SUPPLY_DOCTOR_NAME", "email": "doctor@example.invalid", "role": "doctor" }
+  ],
+  "branding": {
+    "app_name": "SUPPLY_APP_NAME", "app_title": "SUPPLY_APP_TITLE",
+    "app_description": "SUPPLY_APP_DESCRIPTION", "app_url": "https://practice.example.invalid"
+  }
+}

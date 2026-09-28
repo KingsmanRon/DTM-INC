@@ -155,7 +155,7 @@ export async function requireRole(roles: AppRole | AppRole[]): Promise<Session> 
   }
 
   // Step-up (FR-1) at the API layer: a caller who HAS the role but hasn't
-  // reached AAL2 (doctor/admin) is refused here, mirroring resolveMfa for the
+  // reached AAL2 (doctor/staff/admin) is refused here, mirroring resolveMfa for the
   // pages. The role is already proven, so there is nothing to hide — return a
   // distinct 403 mfa_required (not the 404 used for role denials) so the SPA
   // can redirect to /mfa/challenge. Audited so AAL1 API probes are observable.

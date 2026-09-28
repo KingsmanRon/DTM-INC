@@ -19,8 +19,7 @@
 --   3. Sign in at /login.
 --
 -- Roles:
---   'staff'  → no MFA required, fastest E2E path.
---   'doctor' / 'admin' → MFA mandatory; you'll be sent to /mfa/enrol on first
+--   'staff' / 'doctor' / 'admin' → MFA mandatory; you'll be sent to /mfa/enrol on first
 --                        sign-in to set up a TOTP authenticator.
 
 with params as (
@@ -44,7 +43,7 @@ upserted as (
          p.p_full_name,
          r.id,
          'active'::user_status,
-         p.p_role in ('doctor','admin')
+         false -- Never claim an Auth factor has been enrolled by seeding a flag.
   from params p, au, r
   on conflict (id) do update
      set status      = 'active',

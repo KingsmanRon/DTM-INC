@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
+import { checkClientDeployment } from "./scripts/check-client-deployment.mjs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+checkClientDeployment();
+
 const nextConfig = {
+  outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {

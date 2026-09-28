@@ -1,5 +1,7 @@
 "use client";
 
+import { Branding } from "@/lib/branding";
+
 import { useState } from "react";
 import { detectInstallHelpPlatform, trackPwaInstallEvent } from "@/lib/pwa-install";
 
@@ -19,13 +21,13 @@ export function InstallHelpLink() {
   return (
     <>
       <button type="button" onClick={openHelp} className="hover:text-accent-teal underline underline-offset-4">
-        How to install DTM on this device
+        How to install {Branding.appName} on this device
       </button>
       {open ? (
         <aside role="region" aria-label="Install instructions" className="fixed inset-x-3 bottom-3 z-[1001] rounded-lg border border-border-subtle bg-surface-elevated p-3 text-sm shadow-lg">
-          <p className="font-semibold mb-1">Add DTM to your Home Screen</p>
+          <p className="font-semibold mb-1">Add {Branding.appName} to your Home Screen</p>
           {platform === "ios" || platform === "ipados" ? (
-            <p>Tap the Share button, then choose Add to Home Screen. This lets you open DTM like an app.</p>
+            <p>Tap the Share button, then choose Add to Home Screen. This lets you open {Branding.appName} like an app.</p>
           ) : (
             <p>Open your browser menu and choose Install app or Add to Home screen when available.</p>
           )}
