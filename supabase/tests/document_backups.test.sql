@@ -1,7 +1,7 @@
 begin;
 -- Synthetic fixtures only; rolled back after every run.
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(14);
 
 insert into public.hospitals(name,file_prefix,display_order) values ('Example Backup Facility','BKP',10);
 insert into auth.users(id,email) values ('33000000-0000-4000-8000-000000000001','staff@backup.test');
@@ -41,6 +41,11 @@ select ok(not has_function_privilege('anon', 'public.documents_pending_backup_co
 select ok(has_function_privilege('service_role', 'public.documents_pending_backup(integer)', 'EXECUTE'), 'the backup job (service role) can list pending backups');
 
 select ok(public.try_acquire_maintenance_lock('document_backup', 60), 'the backup job can take its maintenance lease');
+
+insert into public.patient_document_backups(storage_key,document_id,object_kind,sha256_hash,status,attempts,last_error)
+values ('p/2/orig.png','35000000-0000-4000-8000-000000000002','original',repeat('c',64),'original_removed',1,'original_deleted_from_storage');
+select is((select count(*)::int from public.documents_pending_backup(50) where storage_key = 'p/2/orig.png'), 0, 'a deleted original is not retried');
+select is(public.documents_pending_backup_count(), 0::bigint, 'nothing is pending once every object is backed up, removed or out of retries');
 
 select * from finish();
 rollback;

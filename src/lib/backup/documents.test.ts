@@ -10,7 +10,7 @@ const target: BackupTarget = {
 };
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-function fakeAdmin(pending: PendingBackup[], objects: Record<string, string>, opts: { lock?: boolean } = {}) {
+function fakeAdmin(pending: PendingBackup[], objects: Record<string, string>, opts: { lock?: boolean; unreadable?: string[]; crash?: string[] } = {}) {
   const ledger = new Map<string, Record<string, unknown>>();
   const rpc = vi.fn(async (name: string, args?: { p_limit?: number }) => {
     if (name === "try_acquire_maintenance_lock") return { data: opts.lock ?? true, error: null };
@@ -25,7 +25,10 @@ function fakeAdmin(pending: PendingBackup[], objects: Record<string, string>, op
   });
   const admin = {
     rpc,
-    storage: { from: () => ({ download: async (key: string) => key in objects ? { data: new Blob([objects[key]!]), error: null } : { data: null, error: { message: "not found" } } }) },
+    storage: { from: () => ({
+      download: async (key: string) => opts.crash?.includes(key) ? Promise.reject(new Error("socket hang up")) : key in objects && !opts.unreadable?.includes(key) ? { data: new Blob([objects[key]!]), error: null } : { data: null, error: { message: "download failed" } },
+      exists: async (key: string) => ({ data: key in objects, error: null }),
+    }) },
     from: () => ({ upsert: async (row: Record<string, unknown>) => { ledger.set(String(row.storage_key), row); return { error: null }; } }),
   } as unknown as SupabaseClient;
   return { admin, ledger, rpc };
@@ -53,6 +56,29 @@ describe("runDocumentBackup", () => {
     expect(s).toMatchObject({ attempted: 3, stored: 1, hash_mismatch: 1, missing_source: 1, remaining: 2 });
     expect(put).toHaveBeenCalledTimes(1);
     expect(ledger.get("p/bad.pdf")).toMatchObject({ status: "hash_mismatch", attempts: 1, backed_up_at: null });
+  });
+
+  it("records a deleted compression original as removed, not as a failure", async () => {
+    const pending = [item("p/orig.png", "o", { object_kind: "original", mime_type: "image/png" }), item("p/live.webp", "w")];
+    const { admin, ledger } = fakeAdmin(pending, { "p/live.webp": "w" });
+    const put = vi.fn(async () => ({ status: "stored" as const, versionId: null }));
+    const s = await runDocumentBackup(admin, target, { timeBudgetMs: 60_000 }, { put });
+    expect(s).toMatchObject({ attempted: 2, stored: 1, original_removed: 1, missing_source: 0, failed: 0 });
+    expect(ledger.get("p/orig.png")).toMatchObject({ status: "original_removed", object_kind: "original" });
+  });
+
+  it("retries a download that failed while the object still exists", async () => {
+    const { admin, ledger } = fakeAdmin([item("p/1.pdf", "1")], { "p/1.pdf": "1" }, { unreadable: ["p/1.pdf"] });
+    const s = await runDocumentBackup(admin, target, { timeBudgetMs: 60_000 }, { put: vi.fn() });
+    expect(s).toMatchObject({ attempted: 1, failed: 1, missing_source: 0, remaining: 1 });
+    expect(ledger.get("p/1.pdf")).toMatchObject({ status: "failed", last_error: "source_download_failed" });
+  });
+
+  it("records an unexpected error against the document instead of losing it", async () => {
+    const { admin, ledger } = fakeAdmin([item("p/1.pdf", "1")], { "p/1.pdf": "1" }, { crash: ["p/1.pdf"] });
+    const s = await runDocumentBackup(admin, target, { timeBudgetMs: 60_000 }, { put: vi.fn() });
+    expect(s).toMatchObject({ attempted: 1, failed: 1 });
+    expect(ledger.get("p/1.pdf")).toMatchObject({ status: "failed", last_error: "unexpected: socket hang up" });
   });
 
   it("records S3 failures for retry and stops cleanly when the time budget runs out", async () => {

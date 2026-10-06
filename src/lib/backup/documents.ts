@@ -33,6 +33,7 @@ export type BackupSummary = {
   stored: number;
   already_present: number;
   missing_source: number;
+  original_removed: number;
   hash_mismatch: number;
   failed: number;
   remaining: number | null;
@@ -42,16 +43,17 @@ export type BackupSummary = {
 export type BackupOptions = { timeBudgetMs: number; batchSize?: number; lockTtlSeconds?: number };
 export type BackupDeps = { put?: typeof putBackupObject; now?: () => number };
 
-type Outcome = "backed_up" | "already_present" | "missing_source" | "hash_mismatch" | "failed";
+type Outcome = "backed_up" | "already_present" | "missing_source" | "original_removed" | "hash_mismatch" | "failed";
+type RecordedStatus = "backed_up" | "missing_source" | "original_removed" | "hash_mismatch" | "failed";
 
 export function emptySummary(): BackupSummary {
-  return { acquired_lock: false, attempted: 0, stored: 0, already_present: 0, missing_source: 0, hash_mismatch: 0, failed: 0, remaining: null, stopped_for_time: false };
+  return { acquired_lock: false, attempted: 0, stored: 0, already_present: 0, missing_source: 0, original_removed: 0, hash_mismatch: 0, failed: 0, remaining: null, stopped_for_time: false };
 }
 
 async function record(
   admin: SupabaseClient,
   item: PendingBackup,
-  status: "backed_up" | "missing_source" | "hash_mismatch" | "failed",
+  status: RecordedStatus,
   extra: { s3Key?: string; versionId?: string | null; error?: string },
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -71,11 +73,33 @@ async function record(
   if (error) console.error("[backup] could not record outcome", { document_id: item.document_id, status, error: error.message });
 }
 
+// true / false when Storage answers, null when the check itself fails.
+async function sourceExists(admin: SupabaseClient, key: string): Promise<boolean | null> {
+  try {
+    const { data } = await admin.storage.from(SOURCE_BUCKET).exists(key);
+    return typeof data === "boolean" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 async function backupOne(admin: SupabaseClient, target: BackupTarget, item: PendingBackup, put: typeof putBackupObject): Promise<Outcome> {
   const { data, error } = await admin.storage.from(SOURCE_BUCKET).download(item.storage_key);
   if (error || !data) {
-    await record(admin, item, "missing_source", { error: "source_download_failed" });
-    return "missing_source";
+    // Tell a deleted object from a failed download. The originals clean-up's
+    // hard-delete removes an original's bytes but keeps original_storage_key;
+    // the compressed copy is the live record and is backed up as 'active'.
+    const exists = await sourceExists(admin, item.storage_key);
+    if (exists === false && item.object_kind === "original") {
+      await record(admin, item, "original_removed", { error: "original_deleted_from_storage" });
+      return "original_removed";
+    }
+    if (exists === false) {
+      await record(admin, item, "missing_source", { error: "source_not_in_storage" });
+      return "missing_source";
+    }
+    await record(admin, item, "failed", { error: "source_download_failed" });
+    return "failed";
   }
   const bytes = new Uint8Array(await data.arrayBuffer());
   const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -141,12 +165,14 @@ export async function runDocumentBackup(
         try {
           outcome = await backupOne(admin, target, item, put);
         } catch (err) {
-          console.error("[backup] unexpected error", { document_id: item.document_id, error: err instanceof Error ? err.message : String(err) });
+          const message = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+          console.error("[backup] unexpected error", { document_id: item.document_id, error: message });
+          await record(admin, item, "failed", { error: `unexpected: ${message}` });
           outcome = "failed";
         }
         if (outcome === "backed_up") summary.stored++;
         else summary[outcome]++;
-        if (outcome !== "backed_up" && outcome !== "already_present") {
+        if (outcome !== "backed_up" && outcome !== "already_present" && outcome !== "original_removed") {
           console.error("[backup] document not backed up", { document_id: item.document_id, object_kind: item.object_kind, outcome });
         }
       }

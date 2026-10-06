@@ -22,6 +22,8 @@ export type BackupTarget = {
   endpoint: string | null;
 };
 
+const PUT_TIMEOUT_MS = 30_000;
+
 export type PutOutcome = { status: "stored"; versionId: string | null } | { status: "exists" };
 
 export function backupTargetFromEnv(env: Record<string, string | undefined> = process.env): BackupTarget | null {
@@ -70,6 +72,9 @@ export async function putBackupObject(
     secretAccessKey: target.secretAccessKey,
     region: target.region,
     service: "s3",
+    // aws4fetch retries 5xx/429 ten times by default (~50 s of backoff); keep
+    // a slow S3 from consuming the whole cron budget.
+    retries: 2,
   });
   const checksum = createHash("sha256").update(bytes).digest("base64");
   const res = await client.fetch(backupObjectUrl(target, key), {
@@ -81,6 +86,7 @@ export async function putBackupObject(
       "x-amz-storage-class": target.storageClass,
       "x-amz-checksum-sha256": checksum,
     },
+    signal: AbortSignal.timeout(PUT_TIMEOUT_MS),
   });
   if (res.status === 412) return { status: "exists" };
   if (!res.ok) {
