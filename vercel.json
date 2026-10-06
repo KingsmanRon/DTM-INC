@@ -9,6 +9,10 @@
     {
       "path": "/api/v1/internal/drain-audit-outbox",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/v1/internal/backup-documents",
+      "schedule": "0 1 * * *"
     }
   ]
 }

@@ -18,12 +18,14 @@
     "docs:compress:rollback": "tsx scripts/rollback_patient_document_compression.ts",
     "docs:compress:cleanup": "tsx scripts/cleanup_patient_document_originals.ts",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
-    "docs:archived:cleanup": "tsx scripts/cleanup_archived_patient_document_files.ts"
+    "docs:archived:cleanup": "tsx scripts/cleanup_archived_patient_document_files.ts",
+    "docs:backup": "tsx scripts/backup_patient_documents.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "aws4fetch": "1.0.20",
     "clsx": "^2.1.1",
     "file-type": "22.0.1",
     "next": "^15.1.6",
