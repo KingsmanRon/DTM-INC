@@ -27,17 +27,32 @@ describe("backup target", () => {
 
 describe("putBackupObject", () => {
   it("sends a signed, conditional, checksummed PUT in the configured storage class", async () => {
-    const fetchMock = vi.fn(async (_req: Request) => new Response("", { status: 200, headers: { "x-amz-version-id": "v1" } }));
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response("", { status: 200, headers: { "x-amz-version-id": "v1" } }));
     vi.stubGlobal("fetch", fetchMock);
     const bytes = new TextEncoder().encode("%PDF-1.4 test");
     const result = await putBackupObject(target, "patient-documents/a/b.pdf", bytes, "application/pdf");
     expect(result).toEqual({ status: "stored", versionId: "v1" });
-    const req = fetchMock.mock.calls[0]![0] as Request;
-    expect(req.method).toBe("PUT");
-    expect(req.headers.get("if-none-match")).toBe("*");
-    expect(req.headers.get("x-amz-storage-class")).toBe("GLACIER_IR");
-    expect(req.headers.get("x-amz-checksum-sha256")).toBe(createHash("sha256").update(bytes).digest("base64"));
-    expect(req.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIATEST\/\d{8}\/af-south-1\/s3\/aws4_request/);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    const headers = new Headers(init.headers);
+    expect(init.method).toBe("PUT");
+    expect(headers.get("if-none-match")).toBe("*");
+    expect(headers.get("x-amz-storage-class")).toBe("GLACIER_IR");
+    expect(headers.get("x-amz-checksum-sha256")).toBe(createHash("sha256").update(bytes).digest("base64"));
+    expect(headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIATEST\/\d{8}\/af-south-1\/s3\/aws4_request/);
+    expect(url).toBe("https://shoba-backups.s3.af-south-1.amazonaws.com/patient-documents/a/b.pdf");
+  });
+
+  it("passes the bytes themselves so the upload keeps a known length", async () => {
+    // A Request (or stream) body is re-sent by Next.js as a chunked upload,
+    // which S3 refuses with 501 NotImplemented.
+    const fetchMock = vi.fn(async (_url: unknown, _init: RequestInit) => new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const bytes = new TextEncoder().encode("abc");
+    await putBackupObject(target, "patient-documents/x.pdf", bytes, "application/pdf");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(typeof url).toBe("string");
+    expect(init.body).toBe(bytes);
+    expect(new Request(String(url), { method: "PUT", body: init.body as BodyInit }).headers.get("transfer-encoding")).toBeNull();
   });
 
   it("treats an existing object as already backed up and reports other failures without secrets", async () => {

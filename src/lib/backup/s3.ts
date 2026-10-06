@@ -72,12 +72,9 @@ export async function putBackupObject(
     secretAccessKey: target.secretAccessKey,
     region: target.region,
     service: "s3",
-    // aws4fetch retries 5xx/429 ten times by default (~50 s of backoff); keep
-    // a slow S3 from consuming the whole cron budget.
-    retries: 2,
   });
   const checksum = createHash("sha256").update(bytes).digest("base64");
-  const res = await client.fetch(backupObjectUrl(target, key), {
+  const signed = await client.sign(backupObjectUrl(target, key), {
     method: "PUT",
     body: bytes,
     headers: {
@@ -86,6 +83,16 @@ export async function putBackupObject(
       "x-amz-storage-class": target.storageClass,
       "x-amz-checksum-sha256": checksum,
     },
+  });
+  // Send the bytes, not the signed Request. Next.js's patched fetch rebuilds a
+  // Request input from its body stream, which arrives at S3 as a chunked upload
+  // without a length and is refused with 501 NotImplemented. A failed PUT is
+  // retried by the next run, so no in-request retry.
+  const res = await fetch(signed.url, {
+    method: "PUT",
+    headers: signed.headers,
+    body: bytes,
+    cache: "no-store",
     signal: AbortSignal.timeout(PUT_TIMEOUT_MS),
   });
   if (res.status === 412) return { status: "exists" };
