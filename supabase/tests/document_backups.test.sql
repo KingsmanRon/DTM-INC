@@ -1,7 +1,7 @@
 begin;
 -- Synthetic fixtures only; rolled back after every run.
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 
 insert into public.hospitals(name,file_prefix,display_order) values ('Example Backup Facility','BKP',10);
 insert into auth.users(id,email) values ('33000000-0000-4000-8000-000000000001','staff@backup.test');
@@ -39,6 +39,8 @@ select ok(not has_table_privilege('anon', 'public.patient_document_backups', 'SE
 select ok(not has_function_privilege('authenticated', 'public.documents_pending_backup(integer)', 'EXECUTE'), 'signed-in users cannot list pending backups');
 select ok(not has_function_privilege('anon', 'public.documents_pending_backup_count()', 'EXECUTE'), 'anonymous users cannot count pending backups');
 select ok(has_function_privilege('service_role', 'public.documents_pending_backup(integer)', 'EXECUTE'), 'the backup job (service role) can list pending backups');
+
+select ok(public.try_acquire_maintenance_lock('document_backup', 60), 'the backup job can take its maintenance lease');
 
 select * from finish();
 rollback;

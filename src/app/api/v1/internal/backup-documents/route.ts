@@ -31,6 +31,9 @@ export async function GET(req: NextRequest) {
   // backlogs clear over successive runs or with `npm run docs:backup`.
   const budgetSeconds = Math.min(Math.max(Number(process.env.BACKUP_TIME_BUDGET_SECONDS) || 45, 5), 50);
   const summary = await runDocumentBackup(getSupabaseAdmin(), target, { timeBudgetMs: budgetSeconds * 1000 });
+  // No lease means nothing ran: another run is active, or the lock row is
+  // missing. Either way the cron log must not show a green run.
+  if (!summary.acquired_lock) return jsonError(409, "backup_lock_unavailable");
   const problems = summary.missing_source + summary.hash_mismatch + summary.failed;
   const body = { ok: summary.acquired_lock && problems === 0, ...summary, ran_at: new Date().toISOString() };
   return problems > 0 ? jsonOk(body, { status: 500 }) : jsonOk(body);

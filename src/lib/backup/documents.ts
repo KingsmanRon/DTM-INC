@@ -115,7 +115,10 @@ export async function runDocumentBackup(
     console.error("[backup] lock acquire failed", { error: lockErr.message });
     return summary;
   }
-  if (acquired !== true) return summary;
+  if (acquired !== true) {
+    console.warn("[backup] maintenance lease not acquired; nothing copied");
+    return summary;
+  }
   summary.acquired_lock = true;
 
   // Items retried in this run are skipped so a persistent failure cannot spin.
