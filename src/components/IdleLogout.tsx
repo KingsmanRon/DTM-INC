@@ -12,23 +12,64 @@ import { useEffect } from "react";
 //
 // Activity = pointer, key, or the tab becoming visible again. Resets are
 // throttled to one per 30s so high-frequency events (scroll/move) cost nothing.
+//
+// The last activity is shared through localStorage by every tab of the
+// browser. Tabs share the auth cookies and logout is global, so a background
+// tab must not sign out a user who is working in another tab; with the shared
+// time, all tabs reach the deadline together and the machine still locks.
 const CHECK_EVERY_MS = 30_000;
 const RESET_THROTTLE_MS = 30_000;
+export const ACTIVITY_KEY = "idle-logout:last-activity";
+
+type ActivityStore = Pick<Storage, "getItem" | "setItem">;
+
+function browserStore(): ActivityStore | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// Storage can be blocked (private mode, site data off); fall back to this tab.
+export function readSharedActivity(store: ActivityStore | null): number {
+  try {
+    const value = Number(store?.getItem(ACTIVITY_KEY));
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function writeSharedActivity(store: ActivityStore | null, at: number): void {
+  try {
+    store?.setItem(ACTIVITY_KEY, String(at));
+  } catch {
+    /* this tab's own timer still applies */
+  }
+}
+
+export function idleExpired(now: number, ownActivity: number, sharedActivity: number, timeoutMs: number): boolean {
+  return now >= Math.max(ownActivity, sharedActivity) + timeoutMs;
+}
 
 export function IdleLogout({ timeoutMinutes }: { timeoutMinutes: number }) {
   useEffect(() => {
     if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) return;
     const timeoutMs = timeoutMinutes * 60_000;
+    const store = browserStore();
 
-    let deadline = Date.now() + timeoutMs;
     let lastReset = Date.now();
     let firing = false;
+    writeSharedActivity(store, lastReset);
+
+    const expired = () => idleExpired(Date.now(), lastReset, readSharedActivity(store), timeoutMs);
 
     const reset = () => {
       const now = Date.now();
       if (now - lastReset < RESET_THROTTLE_MS) return;
       lastReset = now;
-      deadline = now + timeoutMs;
+      writeSharedActivity(store, now);
     };
 
     const fire = async () => {
@@ -48,14 +89,14 @@ export function IdleLogout({ timeoutMinutes }: { timeoutMinutes: number }) {
     };
 
     const tick = () => {
-      if (Date.now() >= deadline) void fire();
+      if (expired()) void fire();
     };
 
     const onVisibility = () => {
-      // Waking a tab that slept past its deadline locks immediately;
-      // otherwise visibility counts as activity.
+      // Waking a tab after the browser sat idle past the deadline locks
+      // immediately; otherwise visibility counts as activity.
       if (document.visibilityState === "visible") {
-        if (Date.now() >= deadline) void fire();
+        if (expired()) void fire();
         else reset();
       }
     };
