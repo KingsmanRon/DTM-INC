@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // go browser -> Supabase directly; the row + audit are written by /finalize.
 const InitSchema = z.object({
   filename: z.string().min(1).max(300),
+  originalFilename: z.string().min(1).max(300).optional(),
   category: z.string(),
   mime: z.string(),
   size: z.number().int().positive(),
@@ -50,7 +51,7 @@ const InitSchema = z.object({
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(["doctor", "staff"]);
+    const session = await requireRole(["doctor", "staff"]);
     const { id } = await params;
     const body = await parseJson(req, InitSchema);
 
@@ -60,6 +61,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const storageKey = `${id}/${randomUUID()}/${safeStorageName(body.filename)}`;
     const admin = getSupabaseAdmin();
+    // Record authority before issuing the upload capability. A patient prefix
+    // alone is not proof that an object belongs to a new upload.
+    const { error: intentError } = await admin.from("document_upload_intents").insert({
+      patient_id: id,
+      actor_user_id: session.userId,
+      storage_key: storageKey,
+      original_filename: body.originalFilename ?? body.filename,
+      category: body.category,
+      mime_type: body.mime,
+      declared_size: body.size,
+    });
+    if (intentError) return jsonError(500, "upload_intent_failed");
     const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(storageKey);
     if (error || !data) return jsonError(500, "sign_failed", error?.message);
 

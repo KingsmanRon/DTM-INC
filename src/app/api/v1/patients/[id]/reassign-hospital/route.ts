@@ -13,7 +13,6 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 
 export const runtime = "nodejs";
@@ -45,7 +44,7 @@ function rpcStatus(error: { code?: string } | null): number {
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["doctor", "staff"]);
+    await requireRole(["doctor", "staff"]);
     const { id } = await params;
     const input = await parseJson(req, ReassignInput);
 
@@ -55,6 +54,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         p_patient_id: id,
         p_new_hospital: input.new_hospital,
         p_reason: input.reason,
+        p_ip_address: clientIp(req),
+        p_user_agent: req.headers.get("user-agent"),
       })
       .maybeSingle();
 
@@ -69,24 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const result = data as ReassignResult;
 
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "patient_file_reassigned",
-      entityType: "patient",
-      entityId: id,
-      patientId: id,
-      metadata: {
-        old_file_number: result.old_file_number,
-        new_file_number: result.new_file_number,
-        old_hospital: result.old_hospital,
-        new_hospital: result.new_hospital,
-        removed_pending_billing: result.removed_pending_billing,
-        reason: input.reason,
-      },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
+    // The RPC persists the audit event in the same transaction.
 
     return jsonOk({
       old_file_number: result.old_file_number,

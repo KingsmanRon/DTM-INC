@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit/log";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
+import { DOCUMENT_FIELDS } from "@/lib/documents/fields";
 import { forceExtension } from "@/lib/documents/constants";
 
 export const runtime = "nodejs";
@@ -55,8 +56,8 @@ export async function GET(
 // Rename a document's display name (original_filename). This edits the label
 // ONLY — the storage object keeps its stable, non-guessable key, so existing
 // signed links and the file bytes are untouched. The update runs under the
-// caller's RLS context (doctor/staff have an UPDATE policy on
-// patient_documents); requireRole is the app-layer backstop. The original file
+// caller's read context; a service-only RPC performs the mutation plus audit.
+// requireRole is the app-layer authorisation. The original file
 // extension is carried over so the renamed file stays openable.
 const RenameSchema = z.object({ filename: z.string().min(1).max(255) });
 
@@ -89,27 +90,15 @@ export async function PATCH(
       return jsonOk({ document: { id: docId, original_filename: newName } });
     }
 
-    const { data: updated, error: upErr } = await supabase
-      .from("patient_documents")
-      .update({ original_filename: newName })
-      .eq("id", docId)
-      .eq("patient_id", id)
-      .is("archived_at", null)
-      .select("id, category, original_filename, mime_type, file_size, uploaded_at, uploaded_by, archived_at")
-      .single();
-    if (upErr || !updated) return jsonError(500, "rename_failed", upErr?.message);
-
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "document_rename",
-      entityType: "patient_documents",
-      entityId: docId,
-      patientId: id,
-      metadata: { from: existing.original_filename, to: newName },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
+    const { data: updated, error: upErr } = await getSupabaseAdmin().rpc("mutate_patient_document", {
+      p_patient_id: id, p_document_id: docId, p_actor_user_id: session.userId,
+      p_operation: "rename", p_filename: newName, p_expected_filename: existing.original_filename,
+      p_ip_address: clientIp(req), p_user_agent: req.headers.get("user-agent"),
+    }).select(DOCUMENT_FIELDS).maybeSingle();
+    if (upErr || !updated) {
+      const status = upErr?.code === "PT404" || upErr?.code === "42501" ? 404 : upErr?.code === "PT409" ? 409 : 500;
+      return jsonError(status, "rename_failed");
+    }
 
     return jsonOk({ document: updated });
   } catch (err) {
@@ -123,7 +112,8 @@ export async function PATCH(
 // the document disappears from the Documents tab (the list filters
 // archived_at IS NULL) while the bytes stay in Storage and the row stays in
 // the DB for the audit trail. Doctor + staff — the same roles that can upload
-// can correct an upload. Runs under the caller's RLS context.
+// can correct an upload. The service-only RPC rechecks the active role and
+// commits the soft archive together with its durable audit event.
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; docId: string }> }
@@ -143,46 +133,16 @@ export async function DELETE(
       /* no body — archiving without a stated reason is allowed */
     }
 
-    const supabase = await getSupabaseServer();
-    const { data: existing, error: readErr } = await supabase
-      .from("patient_documents")
-      .select("id, original_filename, category, archived_at")
-      .eq("id", docId)
-      .eq("patient_id", id)
-      .maybeSingle();
-    if (readErr) return jsonError(500, "db_error", readErr.message);
-    if (!existing) return jsonError(404, "not_found");
-    if (existing.archived_at) {
-      return jsonError(409, "already_removed", "This document has already been removed.");
+    const { data, error } = await getSupabaseAdmin().rpc("mutate_patient_document", {
+      p_patient_id: id, p_document_id: docId, p_actor_user_id: session.userId,
+      p_operation: "archive", p_reason: reason,
+      p_ip_address: clientIp(req), p_user_agent: req.headers.get("user-agent"),
+    }).select("id").maybeSingle();
+    if (error || !data) {
+      if (error?.code === "PT404" || error?.code === "42501") return jsonError(404, "not_found");
+      if (error?.code === "PT409") return jsonError(409, "already_removed", "This document has already been removed.");
+      return jsonError(500, "db_error");
     }
-
-    const { data: archived, error: archiveErr } = await supabase
-      .from("patient_documents")
-      .update({ archived_at: new Date().toISOString(), archived_by: session.userId })
-      .eq("id", docId)
-      .eq("patient_id", id)
-      .is("archived_at", null)
-      .select("id")
-      .maybeSingle();
-    if (archiveErr) return jsonError(500, "db_error", archiveErr.message);
-    // Raced by a concurrent removal — nothing transitioned, so do not audit.
-    if (!archived) return jsonError(409, "already_removed", "This document has already been removed.");
-
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "document_archive",
-      entityType: "patient_documents",
-      entityId: docId,
-      patientId: id,
-      metadata: {
-        filename: existing.original_filename,
-        category: existing.category,
-        ...(reason ? { reason } : {}),
-      },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
 
     return jsonOk({ removed: true });
   } catch (err) {

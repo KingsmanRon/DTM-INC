@@ -227,7 +227,7 @@ select throws_ok(
        '{"surname":"Hacked"}'::jsonb, null, null, null, null) $$,
   'PT404',
   null,
-  'update_patient_bundle returns not-found to admin (RLS, security invoker)'
+  'update_patient_bundle returns not-found to admin (explicit role guard)'
 );
 
 -- ── 15-19: hospital/file-number reassignment (0053) ──────────────────────────

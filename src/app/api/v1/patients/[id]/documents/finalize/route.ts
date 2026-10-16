@@ -2,16 +2,14 @@ import type { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
-import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
-import { writeAudit } from "@/lib/audit/log";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { clientIp, handleRouteError, jsonError, jsonOk, parseJson } from "@/lib/api/http";
 import { checkDocumentContent } from "@/lib/documents/validate";
-import { DOCUMENT_CATEGORY_SET, MAX_DOCUMENT_BYTES } from "@/lib/documents/constants";
+import { MAX_DOCUMENT_BYTES, normaliseDocumentMime } from "@/lib/documents/constants";
+import { DOCUMENT_FIELDS } from "@/lib/documents/fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const BUCKET = "patient-documents";
 
 const FinalizeSchema = z.object({
   storageKey: z.string().min(1).max(1024),
@@ -20,96 +18,68 @@ const FinalizeSchema = z.object({
   mime: z.string(),
 });
 
-async function removeOrphan(admin: ReturnType<typeof getSupabaseAdmin>, key: string) {
-  const { error } = await admin.storage.from(BUCKET).remove([key]);
-  if (error) console.error("[documents.finalize] orphan cleanup failed", { key, error: error.message });
-}
-
-// Step 3 of the signed-URL upload flow. The bytes are already in Storage; here
-// we (server-side) download them — this is function -> Supabase, NOT subject to
-// the inbound 4.5 MB cap — re-check the real size, sniff the magic bytes to
-// reject anything that isn't genuinely one of our allowed types, hash for
-// integrity, then record the row and audit entry. Any rejection deletes the
-// just-uploaded object so a failed finalize never leaves an orphan behind.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireRole(["doctor", "staff"]);
     const { id } = await params;
     const body = await parseJson(req, FinalizeSchema);
-
-    if (!DOCUMENT_CATEGORY_SET.has(body.category)) return jsonError(400, "invalid_category");
-    // Ownership guard: the key must live under THIS patient's prefix, so a
-    // signed URL minted for one patient can't be finalised onto another's record.
-    if (!body.storageKey.startsWith(`${id}/`)) return jsonError(400, "invalid_storage_key");
-
     const admin = getSupabaseAdmin();
+    const { data: intent, error: intentError } = await admin
+      .from("document_upload_intents")
+      .select("id, original_filename, category, mime_type, declared_size, expires_at, document_id")
+      .eq("storage_key", body.storageKey)
+      .eq("patient_id", id)
+      .eq("actor_user_id", session.userId)
+      .maybeSingle();
+    if (intentError) return jsonError(500, "upload_intent_unavailable");
+    if (!intent) return jsonError(404, "upload_intent_not_found");
+    if (body.filename !== intent.original_filename || body.category !== intent.category ||
+        normaliseDocumentMime(body.mime) !== intent.mime_type) {
+      return jsonError(409, "upload_intent_mismatch");
+    }
 
-    const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(body.storageKey);
+    // Replay after a lost response must not download, delete, duplicate or
+    // resurrect the original object, which may since have been compressed.
+    if (intent.document_id) {
+      const { data, error } = await admin.from("patient_documents").select(DOCUMENT_FIELDS)
+        .eq("id", intent.document_id).eq("patient_id", id).is("archived_at", null).maybeSingle();
+      if (error) return jsonError(500, "document_unavailable");
+      if (!data) return jsonError(409, "upload_already_finalised");
+      return jsonOk({ document: data }, { status: 201 });
+    }
+    if (new Date(intent.expires_at).getTime() <= Date.now()) return jsonError(410, "upload_intent_expired");
+
+    const { data: blob, error: dlErr } = await admin.storage.from("patient-documents").download(body.storageKey);
     if (dlErr || !blob) return jsonError(404, "uploaded_object_not_found");
     const bytes = Buffer.from(await blob.arrayBuffer());
+    if (!bytes.byteLength) return jsonError(400, "empty_file");
+    if (bytes.byteLength > MAX_DOCUMENT_BYTES) return jsonError(413, "file_too_large");
+    if (bytes.byteLength !== Number(intent.declared_size)) return jsonError(400, "upload_size_mismatch");
+    const content = await checkDocumentContent(bytes, intent.mime_type);
+    if (!content.ok) return jsonError(415, "invalid_file_content");
 
-    // The size sent at step 1 was client-supplied; trust only the bytes on disk.
-    if (bytes.byteLength === 0) {
-      await removeOrphan(admin, body.storageKey);
-      return jsonError(400, "empty_file");
+    // Row lock, document insert, intent consumption and durable audit share one
+    // DB transaction. Only the server can attest to the checked bytes and hash.
+    const { data, error } = await admin.rpc("finalize_document_upload", {
+      p_intent_id: intent.id,
+      p_actor_user_id: session.userId,
+      p_patient_id: id,
+      p_file_size: bytes.byteLength,
+      p_sha256: createHash("sha256").update(bytes).digest("hex"),
+      p_mime: content.mime,
+      p_ip_address: clientIp(req),
+      p_user_agent: req.headers.get("user-agent"),
+    }).select(DOCUMENT_FIELDS).maybeSingle();
+    if (error || !data) {
+      const status = error?.code === "PT410" ? 410 : error?.code === "PT409" ? 409 : 500;
+      return jsonError(status, "could_not_record_document");
     }
-    if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
-      await removeOrphan(admin, body.storageKey);
-      return jsonError(413, "file_too_large");
-    }
-
-    const content = await checkDocumentContent(bytes, body.mime);
-    if (!content.ok) {
-      await removeOrphan(admin, body.storageKey);
-      return jsonError(415, "invalid_file_content");
-    }
-
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-
-    // RLS client for the row insert (review #9): doctor/staff insert policy
-    // stays in the path — and a nonexistent patient id now fails the FK under
-    // the caller's own context. The admin client remains only for Storage
-    // (download/remove), which has no authenticated-role policies by design.
-    const rls = await getSupabaseServer();
-    const { data, error: dbErr } = await rls
-      .from("patient_documents")
-      .insert({
-        patient_id: id,
-        category: body.category,
-        storage_key: body.storageKey,
-        original_filename: body.filename,
-        mime_type: content.mime,
-        file_size: bytes.byteLength,
-        sha256_hash: sha256,
-        uploaded_by: session.userId,
-      })
-      .select("id, category, original_filename, mime_type, file_size, uploaded_at, uploaded_by, archived_at")
-      .single();
-    if (dbErr || !data) {
-      await removeOrphan(admin, body.storageKey);
-      return jsonError(500, "could_not_record_document", dbErr?.message);
-    }
-
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "document_upload",
-      entityType: "patient_documents",
-      entityId: data.id,
-      patientId: id,
-      metadata: {
-        category: body.category,
-        sha256,
-        size: bytes.byteLength,
-        mime: content.mime,
-        storage_key: body.storageKey,
-      },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
-
     return jsonOk({ document: data }, { status: 201 });
   } catch (err) {
     return handleRouteError(err);
   }
 }
+
+// NO Storage deletion here, including errors/timeouts: an uncertain commit is
+// not proof of an orphan. Abandoned uploads remain unregistered. Any later
+// cleanup requires a separately reviewed lifecycle that protects references.

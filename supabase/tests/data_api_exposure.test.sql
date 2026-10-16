@@ -23,7 +23,7 @@ select is(
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0, 'anon can execute no application function');
 select ok(has_function_privilege('authenticated', 'public.onboard_patient(uuid,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'), 'signed-in users can still onboard patients');
-select ok(has_function_privilege('authenticated', 'public.update_patient_bundle(uuid,jsonb,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'), 'signed-in users can still update patients');
+select ok(has_function_privilege('authenticated', 'public.update_patient_bundle(uuid,jsonb,jsonb,jsonb,jsonb,jsonb,inet,text)', 'EXECUTE'), 'signed-in users can still update patients');
 select ok(has_function_privilege('authenticated', 'public.is_doctor()', 'EXECUTE'), 'RLS role helpers stay available to signed-in users');
 
 -- Audit outbox is service-only.
