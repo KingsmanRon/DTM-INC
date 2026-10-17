@@ -7,7 +7,7 @@ import {
   verifySignature,
 } from "./signature";
 
-// Shared with KingsmanRon/Appointments (apps/worker test of the ACCESS side):
+// Shared with KingsmanRon/Appointments (tests/unit/dtm-signature.test.ts):
 // both implementations must produce these exact signatures.
 const VECTOR = {
   secret: "dtm-test-vector-secret-0123456789abcdef",

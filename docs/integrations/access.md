@@ -132,7 +132,7 @@ Unknown fields are refused.
 | Status | Body |
 | --- | --- |
 | `200` | `{schema_version: "access-referral-status.v1", execution_id, reference, status, delivered_at, resolved_at}`, where `status` is `pending`, `accepted` or `declined` |
-| `404` | Authoritative: nothing is stored for that key |
+| `404` | Nothing is stored for that key yet. A delivery still in flight can be stored while its signature is valid (five minutes), so ACCESS keeps checking and hands the case to its staff if it never appears |
 | `500` | Unknown; try again later |
 
 ## Operating it
