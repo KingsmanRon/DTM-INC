@@ -31,6 +31,10 @@ const TRACKED_FUNCTIONS = [
   "current_app_role",
   "prevent_finalised_clinical_note_mutation",
   "prevent_consent_record_mutation",
+  "receive_access_referral",
+  "read_access_referral",
+  "accept_access_referral",
+  "decline_access_referral",
 ];
 
 const MIGRATIONS_DIR = resolve(process.cwd(), "supabase/migrations");
