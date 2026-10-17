@@ -69,6 +69,7 @@ export default async function AuthedLayout({ children }: { children: React.React
               <>
                 <Link href="/patients/new" prefetch={false} className="hover:text-accent-teal">New patient</Link>
                 <Link href="/billing" prefetch={false} className="hover:text-accent-teal">Billing</Link>
+                <Link href="/referrals" prefetch={false} className="hover:text-accent-teal">Referral inbox</Link>
               </>
             ) : null}
             {session.role === "admin" ? (
