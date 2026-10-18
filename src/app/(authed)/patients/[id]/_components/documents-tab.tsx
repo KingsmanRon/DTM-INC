@@ -18,6 +18,9 @@ function friendlyUploadError(code: unknown): string {
     case "invalid_file_content": return "That file's contents don't match a supported document type.";
     case "invalid_category": return "Please choose a valid category.";
     case "empty_file": return "That file is empty.";
+    case "upload_intent_not_found":
+    case "upload_intent_expired":
+    case "upload_intent_mismatch": return "This upload session is no longer valid. Refresh the page and upload the file again.";
     case "uploaded_object_not_found": return "The upload didn't complete — please try again.";
     default: return "Upload failed.";
   }
@@ -84,7 +87,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ filename: uploadFile.name, category, mime: uploadFile.type, size: uploadFile.size }),
+        body: JSON.stringify({ filename: uploadFile.name, originalFilename, category, mime: uploadFile.type, size: uploadFile.size }),
       });
       if (!initRes.ok) {
         const j = await initRes.json().catch(() => ({}));

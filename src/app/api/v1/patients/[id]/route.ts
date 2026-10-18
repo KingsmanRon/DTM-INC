@@ -101,7 +101,7 @@ function rpcStatus(error: { code?: string } | null): number {
 // Now it is all-or-nothing and the audit row matches reality.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireRole(["doctor", "staff"]);
+    await requireRole(["doctor", "staff"]);
     const { id } = await params;
     const patch = await parseJson(req, PatientPatch);
     const supabase = await getSupabaseServer();
@@ -116,6 +116,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         p_medical_aid: medical_aid ?? null,
         p_contact: contact ?? null,
         p_referral: referral ?? null,
+        p_ip_address: clientIp(req),
+        p_user_agent: req.headers.get("user-agent"),
       })
       .maybeSingle();
     if (error) {
@@ -128,17 +130,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (!data) return jsonError(404, "not_found");
 
-    await writeAudit({
-      actorUserId: session.userId,
-      actorRole: session.role,
-      action: "patient_update",
-      entityType: "patient",
-      entityId: id,
-      patientId: id,
-      metadata: { changed_fields: Object.keys(patch) },
-      ipAddress: clientIp(req),
-      userAgent: req.headers.get("user-agent"),
-    });
+    // The RPC persists the audit event in the same transaction.
 
     return jsonOk({ patient: data });
   } catch (err) {
