@@ -40,6 +40,10 @@ function isPublic(pathname: string): boolean {
   // would 401 them before the handler's secret check ever runs. Let them
   // through; each handler enforces CRON_SECRET itself (401 without it).
   if (pathname.startsWith("/api/v1/internal/")) return true;
+  // The ACCESS integration API is called by the ACCESS worker, not a person:
+  // no session cookie, so the getUser() gate below would 401 it. Each handler
+  // verifies the request signature itself (src/lib/integrations/access).
+  if (pathname.startsWith("/api/v1/integrations/access/")) return true;
   // /mfa/* requires AAL1 but not AAL2 — handled inside the page, not here.
   if (pathname.startsWith("/mfa/")) return false;
   return false;
@@ -112,6 +116,7 @@ export const config = {
     "/dashboard/:path*",
     "/patients/:path*",
     "/billing/:path*",
+    "/referrals/:path*",
     "/admin/:path*",
     "/mfa/:path*",
   ],

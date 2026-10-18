@@ -15,6 +15,8 @@ const AUDIT_ACTIONS = [
   "break_glass_request", "break_glass_access",
   "consent_capture", "access_denied",
   "billing_export_generate", "billing_export_item_update", "billing_export_mark_returned",
+  "access_referral_received", "access_referral_view", "access_referral_accepted",
+  "access_referral_declined", "access_integration_denied",
 ] as const;
 
 const PAGE_SIZE = 100;

@@ -160,6 +160,7 @@ Operational runbooks (restore drill, break-glass, breach-notification) belong in
 
 - CI release gate: `.github/workflows/release-gate.yml` runs `npm ci`, lint, typecheck, test, and build on PRs/pushes.
 - Go-live owner checklist: `docs/internal/go-live-owner-checklist.md` tracks required Engineering/Ops/Clinical sign-offs before DNS cutover.
+- ACCESS referral integration: `docs/integrations/access.md` covers the signed intake API, the reception inbox, key rotation and the go-live steps. It is off until configured.
 
 ---
 
