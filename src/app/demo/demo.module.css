@@ -1179,6 +1179,10 @@
   margin-top: 0.8rem;
 }
 
+.documentPending {
+  opacity: 0.62;
+}
+
 .documentItem {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1230,6 +1234,39 @@
   font-size: 0.73rem;
   font-weight: 450;
   line-height: 1.45;
+}
+
+.stageResult {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  border: 1px solid rgba(0, 212, 184, 0.36);
+  border-radius: 0.35rem;
+  padding: 0.7rem 0.9rem;
+  background: rgba(0, 212, 184, 0.08);
+  color: #d6efe9;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition: opacity 360ms ease, transform 360ms ease;
+}
+
+.stageResult svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  fill: none;
+  stroke: var(--demo-teal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.stageResultShown {
+  opacity: 1;
+  transform: none;
 }
 
 .noteTimeline {
@@ -1295,7 +1332,7 @@
 }
 
 .demoCursor i {
-  animation: stageClick 1.6s 0.55s ease-out both;
+  animation: stageClick 1.6s 0.15s ease-out both;
 }
 
 .scrollControls {
@@ -1485,72 +1522,6 @@
   color: var(--demo-muted);
   font-size: 0.78rem;
   line-height: 1.55;
-}
-
-.trustTags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.7rem;
-}
-
-.trustTags em {
-  border: 1px solid var(--demo-border-bright);
-  border-radius: 0.25rem;
-  padding: 0.2rem 0.5rem;
-  color: #9fb0c4;
-  font-size: 0.6rem;
-  font-style: normal;
-  letter-spacing: 0.02em;
-}
-
-.trustBilling {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.8rem;
-  align-items: center;
-  margin-top: 0.15rem;
-  border: 1px dashed var(--demo-border-bright);
-  border-radius: 0.45rem;
-  padding: 0.85rem 1rem;
-  background: rgba(10, 19, 34, 0.55);
-}
-
-.trustBillingIcon {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border-radius: 0.35rem;
-  color: #8fa0b5;
-}
-
-.trustBillingIcon svg {
-  width: 1.15rem;
-  height: 1.15rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.45;
-}
-
-.trustBilling > div {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.trustBilling strong {
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.trustBilling span {
-  margin-top: 0.2rem;
-  color: var(--demo-muted);
-  font-size: 0.68rem;
-  line-height: 1.45;
 }
 
 .demoFooter {
@@ -2190,6 +2161,12 @@
   .stageInner {
     height: 52vh;
     min-height: 0;
+  }
+}
+
+@media (max-width: 600px), (max-height: 640px) {
+  .stageResult {
+    display: none;
   }
 }
 
