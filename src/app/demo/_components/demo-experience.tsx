@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../demo.module.css";
 
@@ -16,8 +15,8 @@ const chapters = [
   {
     number: "02",
     short: "Onboarding",
-    title: "Onboard the complete patient",
-    body: "Seven guided sections keep every intake complete and recoverable.",
+    title: "Onboard a patient, step by step",
+    body: "Seven short steps, one at a time. Required details can't be skipped, and an unfinished intake can be picked up again.",
     aria: "Complete seven section patient onboarding",
   },
   {
@@ -41,7 +40,6 @@ type IconName =
   | "patient"
   | "document"
   | "calendar"
-  | "billing"
   | "shield"
   | "search"
   | "folder"
@@ -52,6 +50,8 @@ type IconName =
   | "history"
   | "ledger";
 
+type Point = { x: number; y: number };
+
 export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number }) {
   const storyRef = useRef<HTMLElement>(null);
   const chapterRefs = useRef<Array<HTMLElement | null>>([]);
@@ -60,7 +60,10 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
   const [activeChapter, setActiveChapter] = useState(initialChapter);
   const [progress, setProgress] = useState(initialChapter / (chapters.length - 1));
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ from: Point | null; target: Point | null }>({ from: null, target: null });
+  // 0: cursor rests on the field being used, 1: cursor moves to the button and
+  // clicks, 2: the result of the click is showing.
+  const [phase, setPhase] = useState<0 | 1 | 2>(0);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -131,9 +134,10 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
     chapterRefs.current[initialChapter]?.scrollIntoView({ behavior: "auto", block: "center" });
   }, [initialChapter]);
 
-  // Anchor the walkthrough cursor to the active chapter's action button so it
-  // always rests on a real target, on every viewport, instead of a guessed
-  // percentage that drifts into empty space.
+  // Anchor the walkthrough cursor to real controls in the active chapter: the
+  // field being used (`data-cursor-from`) and the button it then clicks
+  // (`data-cursor-target`). Measuring, rather than guessing a percentage, keeps
+  // it on a real target on every viewport.
   useEffect(() => {
     if (reducedMotion) return;
     const stage = productStageRef.current;
@@ -141,28 +145,49 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
     if (!stage || !content) return;
 
     const measure = () => {
-      const targets = content.querySelectorAll<HTMLElement>("[data-cursor-target]");
-      const target = targets[activeChapter];
-      if (!target) return;
       const stageRect = stage.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      // A target hidden at the current breakpoint (display:none) measures as a
-      // zero rect at the origin — clear the cursor instead of parking it in the
-      // top-left corner.
-      if (!stageRect.width || !stageRect.height || !targetRect.width || !targetRect.height) {
-        setCursorPos(null);
-        return;
-      }
-      setCursorPos({
-        x: ((targetRect.left + targetRect.width / 2 - stageRect.left) / stageRect.width) * 100,
-        y: ((targetRect.top + targetRect.height / 2 - stageRect.top) / stageRect.height) * 100,
-      });
+      const point = (element: HTMLElement | undefined): Point | null => {
+        if (!element || !stageRect.width || !stageRect.height) return null;
+        const rect = element.getBoundingClientRect();
+        // An element hidden at the current breakpoint (display:none) measures
+        // as a zero rect at the origin; clear it instead of parking the cursor
+        // in the top-left corner.
+        if (!rect.width || !rect.height) return null;
+        return {
+          x: ((rect.left + rect.width / 2 - stageRect.left) / stageRect.width) * 100,
+          y: ((rect.top + rect.height / 2 - stageRect.top) / stageRect.height) * 100,
+        };
+      };
+      const from = content.querySelectorAll<HTMLElement>("[data-cursor-from]")[activeChapter];
+      const target = content.querySelectorAll<HTMLElement>("[data-cursor-target]")[activeChapter];
+      setCursorPos({ from: point(from), target: point(target) });
     };
 
     measure();
+    // The pane slides into place for ~420ms; measure again once it has settled.
+    const settled = window.setTimeout(measure, 460);
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
-    return () => observer.disconnect();
+    return () => {
+      window.clearTimeout(settled);
+      observer.disconnect();
+    };
+  }, [activeChapter, reducedMotion]);
+
+  // Play each chapter as a short sequence: look at the field, click the button,
+  // show the outcome. With reduced motion the outcome is simply shown.
+  useEffect(() => {
+    if (reducedMotion) {
+      setPhase(2);
+      return;
+    }
+    setPhase(0);
+    const toButton = window.setTimeout(() => setPhase(1), 1100);
+    const toResult = window.setTimeout(() => setPhase(2), 2200);
+    return () => {
+      window.clearTimeout(toButton);
+      window.clearTimeout(toResult);
+    };
   }, [activeChapter, reducedMotion]);
 
   const scrollTo = useCallback(
@@ -197,7 +222,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
               paperwork.
             </h1>
             <p className={styles.heroLead}>
-              See how DTM Inc. prevents duplicate files and turns first intake into a complete, defensible patient record.
+              See how reception registers a patient one simple step at a time, and how DTM Inc. stops duplicate files before they start.
             </p>
             <button className={styles.scrollButton} type="button" onClick={() => scrollTo("tour")}>
               <Icon name="arrow" />
@@ -259,16 +284,16 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
                 <div className={styles.stageInner}>
                   <ProductSidebar active={activeChapter} />
                   <div className={styles.stageContent} ref={stageContentRef}>
-                    <StagePane active={activeChapter === 0}><DuplicateStage /></StagePane>
-                    <StagePane active={activeChapter === 1}><OnboardingStage /></StagePane>
-                    <StagePane active={activeChapter === 2}><DocumentsStage /></StagePane>
-                    <StagePane active={activeChapter === 3}><ClinicalNotesStage /></StagePane>
+                    <StagePane active={activeChapter === 0}><DuplicateStage done={phase === 2} /></StagePane>
+                    <StagePane active={activeChapter === 1}><OnboardingStage done={phase === 2} /></StagePane>
+                    <StagePane active={activeChapter === 2}><DocumentsStage done={phase === 2} /></StagePane>
+                    <StagePane active={activeChapter === 3}><ClinicalNotesStage done={phase === 2} /></StagePane>
                   </div>
                 </div>
               </ProductChrome>
 
-              {!reducedMotion && cursorPos ? (
-                <DemoCursor chapter={activeChapter} x={cursorPos.x} y={cursorPos.y} />
+              {!reducedMotion ? (
+                <DemoCursor chapter={activeChapter} point={phase === 0 ? (cursorPos.from ?? cursorPos.target) : cursorPos.target} clicking={phase === 1} />
               ) : null}
             </div>
             <p className={styles.scrollControls}><span aria-hidden="true" />Scroll controls the walkthrough</p>
@@ -283,7 +308,7 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
               From first search to a file <span>you can trust.</span>
             </h2>
             <p className={styles.finalLead}>
-              Complete onboarding, patient documents and defensible clinical notes — held together by three guarantees that hold on every record.
+              Reception registers the patient. The doctor writes the notes. DTM keeps every record complete and accountable.
             </p>
             <p className={styles.finalNote}>Built around the work your practice already does.</p>
             <div className={styles.finalActions}>
@@ -295,10 +320,6 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
                 <Icon name="arrow" />
                 Return to the top
               </button>
-              <Link href="/demo" className={styles.textButton}>
-                <Icon name="arrow" />
-                Try it yourself
-              </Link>
             </div>
           </div>
 
@@ -428,7 +449,6 @@ function ProductSidebar({ active, compact = false }: { active: number; compact?:
       { name: "patient" as const, label: "Patients" },
       { name: "document" as const, label: "Documents" },
       { name: "calendar" as const, label: "Clinical notes" },
-      { name: "billing" as const, label: "Billing" },
       { name: "shield" as const, label: "Audit" },
     ],
     [],
@@ -454,7 +474,7 @@ function StagePane({ active, children }: { active: boolean; children: React.Reac
   );
 }
 
-function DuplicateStage() {
+function DuplicateStage({ done }: { done: boolean }) {
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
@@ -463,7 +483,7 @@ function DuplicateStage() {
       </div>
       <div className={styles.identityFields}>
         <MockField label="Identity type" value="South African ID" />
-        <MockField label="ID number" value="900101 1234 082" />
+        <MockField label="ID number" value="900101 1234 082" cursorFrom />
       </div>
       <div className={styles.searchResultLabel}>Existing legal identity found</div>
       <div className={styles.searchResult}>
@@ -477,21 +497,22 @@ function DuplicateStage() {
         <div><strong>Duplicate file prevented</strong><small>Open the existing record instead of creating another patient.</small></div>
         <span className={styles.secondaryControl} data-cursor-target>Open existing file</span>
       </div>
+      <StageResult done={done}>Existing file opened. No second file was created.</StageResult>
     </div>
   );
 }
 
-function OnboardingStage() {
+function OnboardingStage({ done }: { done: boolean }) {
   const steps = ["Patient", "Responsible", "Medical aid", "Emergency", "Referral", "Dependants", "Consent"];
   return (
     <div className={styles.mockPage}>
       <div className={styles.mockPageHeading}>
-        <div><h3>Complete patient onboarding</h3><p>Every required section is reviewed before DTM generates the patient file.</p></div>
+        <div><h3>Complete patient onboarding</h3><p>One short section at a time. Everything required is checked before the file is created.</p></div>
         <span className={styles.stepCounter}>Step 7 of 7</span>
       </div>
       <div className={styles.fullStepper}>
         {steps.map((step, index) => (
-          <div className={index === steps.length - 1 ? styles.stepActive : styles.stepComplete} key={step}>
+          <div className={index === steps.length - 1 ? styles.stepActive : styles.stepComplete} key={step} data-cursor-from={index === steps.length - 1 ? "" : undefined}>
             <span>{index + 1}</span><small>{step}</small>
           </div>
         ))}
@@ -508,11 +529,12 @@ function OnboardingStage() {
         <span>Draft saved in this session · consent text current</span>
         <span className={styles.primaryControl} data-cursor-target>Submit and generate file number</span>
       </div>
+      <StageResult done={done}>File number NTH-2026-0148 created. The patient file is ready.</StageResult>
     </div>
   );
 }
 
-function DocumentsStage() {
+function DocumentsStage({ done }: { done: boolean }) {
   return (
     <div className={styles.mockPage}>
       <div className={styles.patientHeader}>
@@ -525,19 +547,19 @@ function DocumentsStage() {
       </div>
       <div className={styles.documentUpload}>
         <div><small>Document category</small><strong>ID copy</strong></div>
-        <div><small>Selected file</small><strong>thandi-mokoena-id.jpg</strong></div>
+        <div data-cursor-from><small>Selected file</small><strong>thandi-mokoena-id.jpg</strong></div>
         <span className={styles.primaryControl} data-cursor-target>Attach document</span>
       </div>
       <div className={styles.documentList}>
-        <DocumentItem name="Thandi Mokoena ID copy.pdf" meta="ID copy · 428 KB · Optimised" />
-        <DocumentItem name="Dr Naidoo referral letter.pdf" meta="Referral letter · 212 KB · Verified" />
+        <DocumentItem name="Thandi Mokoena ID copy.pdf" meta="ID copy · 428 KB · Optimised" status={done ? "On file" : "Ready to attach"} pending={!done} />
+        <DocumentItem name="Dr Naidoo referral letter.pdf" meta="Referral letter · 212 KB · Verified" status="On file" />
       </div>
       <div className={styles.fileStrip}><Icon name="shield" /><div><strong>Checked before it joins the patient file</strong><span>Content verified, integrity recorded and viewing access controlled.</span></div></div>
     </div>
   );
 }
 
-function ClinicalNotesStage() {
+function ClinicalNotesStage({ done }: { done: boolean }) {
   return (
     <div className={styles.mockPage}>
       <div className={styles.patientHeader}>
@@ -549,7 +571,7 @@ function ClinicalNotesStage() {
         <span>Demographics</span><span>Documents</span><span className={styles.mockTabActive}>Clinical notes</span>
       </div>
       <div className={styles.noteComposer}>
-        <div><small>New clinical note · 20 July 2026</small><strong>Wound clean and dry. Patient mobilising well. Continue current care plan.</strong></div>
+        <div data-cursor-from><small>New clinical note · 20 July 2026</small><strong>Wound clean and dry. Patient mobilising well. Continue current care plan.</strong></div>
         <span className={styles.primaryControl} data-cursor-target>Save note</span>
       </div>
       <div className={styles.noteTimeline}>
@@ -563,20 +585,28 @@ function ClinicalNotesStage() {
         </div>
       </div>
       <div className={styles.flowLine} aria-hidden="true"><span>Save</span><i /><span>Finalise</span><i /><span>Amend</span><i /><span>Void with reason</span></div>
+      <StageResult done={done}>Note saved as a draft. Finalise it when you are ready.</StageResult>
     </div>
   );
 }
 
-function DemoCursor({ x, y, chapter }: { x: number; y: number; chapter: number }) {
+function StageResult({ done, children }: { done: boolean; children: React.ReactNode }) {
   return (
-    <span
-      key={chapter}
-      className={styles.demoCursor}
-      style={{ left: `${x}%`, top: `${y}%` }}
-      aria-hidden="true"
-    >
+    <div className={`${styles.stageResult} ${done ? styles.stageResultShown : ""}`} aria-hidden={!done}>
+      <Icon name="check" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+// One persistent cursor, so it glides from step to step; only the click ring
+// is re-created for each click.
+function DemoCursor({ chapter, point, clicking }: { chapter: number; point: Point | null; clicking: boolean }) {
+  if (!point) return null;
+  return (
+    <span className={styles.demoCursor} style={{ left: `${point.x}%`, top: `${point.y}%` }} aria-hidden="true">
       <CursorShape />
-      <i />
+      {clicking ? <i key={chapter} /> : null}
     </span>
   );
 }
@@ -594,49 +624,36 @@ function TrustPanel() {
     <div className={styles.trustPanel} aria-label="How DTM Inc. keeps the record trustworthy">
       <div className={styles.trustPanelHeader}>
         <span className={styles.trustBadge}>Why the record holds up</span>
-        <p>Three guarantees run through every workflow in this tour.</p>
+        <p>Three things that hold on every record.</p>
       </div>
       <ul className={styles.trustPillars}>
         <TrustPillar
           icon="lock"
           title="Controlled access"
-          body="Clinical notes are invisible to reception and admin — absent, not merely blocked. Notes are encrypted at rest, and files open only through short-lived links."
-          tags={["Role based", "Encrypted notes", "Expiring links"]}
+          body="Clinical notes are for the doctor only. Reception and admin never see them."
         />
         <TrustPillar
           icon="history"
           title="Preserved history"
-          body="Nothing is overwritten. Finalising locks a note, an amendment links a new version to the original, and a removed document is archived rather than destroyed."
-          tags={["Locked on finalise", "Linked amendments", "Reason-backed voids"]}
+          body="Nothing is overwritten. An amended note keeps the original, and a removed document is archived, not destroyed."
         />
         <TrustPillar
           icon="ledger"
           title="Accountable actions"
-          body="Every action lands in an append-only, hash-chained audit log that a daily check re-verifies from end to end."
-          tags={["Tamper evident", "Daily verification", "Who and when"]}
+          body="Every action is recorded in an audit log: who did what, and when."
         />
       </ul>
-      <div className={styles.trustBilling}>
-        <span className={styles.trustBillingIcon}><Icon name="billing" /></span>
-        <div>
-          <strong>Billing, as a supporting capability</strong>
-          <span>Monthly per-hospital exports staged straight from these records — handled, not the headline.</span>
-        </div>
-      </div>
     </div>
   );
 }
 
-function TrustPillar({ icon, title, body, tags }: { icon: IconName; title: string; body: string; tags: readonly string[] }) {
+function TrustPillar({ icon, title, body }: { icon: IconName; title: string; body: string }) {
   return (
     <li className={styles.trustPillar}>
       <span className={styles.trustPillarIcon}><Icon name={icon} /></span>
       <div>
         <strong>{title}</strong>
         <p>{body}</p>
-        <span className={styles.trustTags}>
-          {tags.map((tag) => <em key={tag}>{tag}</em>)}
-        </span>
       </div>
     </li>
   );
@@ -654,20 +671,20 @@ function MiniStepper() {
   return <div className={styles.miniStepper} aria-hidden="true">{[1, 2, 3, 4].map((step) => <i className={step === 1 ? styles.miniStepActive : ""} key={step}>{step}</i>)}</div>;
 }
 
-function MockField({ label, value }: { label: string; value: string }) {
-  return <label className={styles.mockField}><span>{label}</span><strong>{value}</strong></label>;
+function MockField({ label, value, cursorFrom = false }: { label: string; value: string; cursorFrom?: boolean }) {
+  return <label className={styles.mockField} data-cursor-from={cursorFrom ? "" : undefined}><span>{label}</span><strong>{value}</strong></label>;
 }
 
 function CompletionItem({ label, value }: { label: string; value: string }) {
   return <div><span aria-hidden="true"><Icon name="check" /></span><small>{label}</small><strong>{value}</strong></div>;
 }
 
-function DocumentItem({ name, meta }: { name: string; meta: string }) {
+function DocumentItem({ name, meta, status, pending = false }: { name: string; meta: string; status: string; pending?: boolean }) {
   return (
-    <div className={styles.documentItem}>
+    <div className={`${styles.documentItem} ${pending ? styles.documentPending : ""}`}>
       <span className={styles.closeIcon}><Icon name="document" /></span>
       <div><strong>{name}</strong><small>{meta}</small></div>
-      <span className={styles.activeStatus}>On file</span>
+      <span className={styles.activeStatus}>{status}</span>
     </div>
   );
 }
@@ -678,7 +695,6 @@ function Icon({ name }: { name: IconName }) {
     patient: <><circle cx="12" cy="7.5" r="4" /><path d="M4.5 21c.8-5 3.3-7.5 7.5-7.5S18.7 16 19.5 21" /></>,
     document: <><path d="M6 2.5h8l4 4V21.5H6z" /><path d="M14 2.5v4h4M9 11h6M9 15h6" /></>,
     calendar: <><rect x="3.5" y="5.5" width="17" height="15" rx="1.5" /><path d="M7.5 3v5M16.5 3v5M3.5 10h17M8 14h.1M12 14h.1M16 14h.1M8 17.5h.1M12 17.5h.1" /></>,
-    billing: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 15h4" /></>,
     shield: <><path d="M12 2.5 20 6v5.5c0 5.2-3.2 8.4-8 10-4.8-1.6-8-4.8-8-10V6z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
     folder: <path d="M2.5 6.5h7l2-2h10v15h-19z" />,

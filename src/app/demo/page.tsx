@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { BRAND } from "./_interactive/brand";
-import { DemoApp } from "./_interactive/ui/DemoApp";
-import { parseView } from "./_interactive/view/url";
+import { DemoExperience } from "./_components/demo-experience";
 
 export const metadata: Metadata = {
-  title: `${BRAND.product.name} | Interactive product demo`,
+  title: "DTM Inc. | Guided product tour",
   description:
-    "Try DTM Inc. with entirely fictional patients: duplicate prevention, seven-section onboarding, documents, clinical notes, roles, hospitals, billing file tracking and the audit log.",
+    "A guided demonstration of DTM Inc. duplicate prevention, patient onboarding, document attachment and clinical note workflows.",
   robots: {
     index: false,
     follow: false,
@@ -15,12 +12,16 @@ export const metadata: Metadata = {
   },
 };
 
-type SearchParams = Record<string, string | string[] | undefined>;
+const CHAPTERS: Record<string, number> = {
+  duplicates: 0,
+  onboarding: 1,
+  documents: 2,
+  "clinical-notes": 3,
+};
 
-export default async function DemoPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const params = await searchParams;
-  // Links to the original scrolling story (/demo?chapter=...) keep working.
-  const chapter = Array.isArray(params.chapter) ? params.chapter[0] : params.chapter;
-  if (chapter) redirect(`/demo/story?chapter=${encodeURIComponent(chapter)}`);
-  return <DemoApp initialView={parseView(params)} />;
+export default async function DemoPage({ searchParams }: { searchParams: Promise<{ chapter?: string | string[] }> }) {
+  const query = await searchParams;
+  const requested = Array.isArray(query.chapter) ? query.chapter[0] : query.chapter;
+  const initialChapter = requested ? (CHAPTERS[requested] ?? 0) : 0;
+  return <DemoExperience initialChapter={initialChapter} />;
 }
