@@ -16,7 +16,7 @@ const chapters = [
     number: "02",
     short: "Onboarding",
     title: "Onboard a patient, step by step",
-    body: "Seven short steps, one at a time. Required details can't be skipped, and an unfinished intake can be picked up again.",
+    body: "Seven short steps, one at a time. Required details can't be skipped, and a half-finished intake survives a page refresh.",
     aria: "Complete seven section patient onboarding",
   },
   {
@@ -30,7 +30,7 @@ const chapters = [
     number: "04",
     short: "Clinical notes",
     title: "Write notes without rewriting history",
-    body: "Finalise, amend and void notes while preserving the original record.",
+    body: "Finalise, amend and void notes while preserving the original record. Notes are encrypted and only the doctor can open them.",
     aria: "Defensible doctor only clinical notes",
   },
 ] as const;
@@ -297,6 +297,10 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
               ) : null}
             </div>
             <p className={styles.scrollControls}><span aria-hidden="true" />Scroll controls the walkthrough</p>
+            <p className={styles.stageCaption} aria-hidden="true">
+              <span>{chapters[activeChapter]?.number}</span>
+              {chapters[activeChapter]?.short}
+            </p>
           </div>
         </div>
       </section>
@@ -565,7 +569,7 @@ function ClinicalNotesStage({ done }: { done: boolean }) {
       <div className={styles.patientHeader}>
         <span className={styles.avatarLarge}>TM</span>
         <div><h3>Mokoena, Thandi</h3><p><span>NTH-2026-0147</span> · Doctor view</p></div>
-        <span className={styles.doctorOnly}>Doctor only</span>
+        <span className={styles.doctorOnly}>Doctor only · Encrypted</span>
       </div>
       <div className={styles.mockTabs}>
         <span>Demographics</span><span>Documents</span><span className={styles.mockTabActive}>Clinical notes</span>
@@ -624,13 +628,13 @@ function TrustPanel() {
     <div className={styles.trustPanel} aria-label="How DTM Inc. keeps the record trustworthy">
       <div className={styles.trustPanelHeader}>
         <span className={styles.trustBadge}>Why the record holds up</span>
-        <p>Three things that hold on every record.</p>
+        <p>How every record stays safe.</p>
       </div>
       <ul className={styles.trustPillars}>
         <TrustPillar
           icon="lock"
           title="Controlled access"
-          body="Clinical notes are for the doctor only. Reception and admin never see them."
+          body="Clinical notes are encrypted and open only to the doctor. Emergency access by an administrator is delayed and fully audited."
         />
         <TrustPillar
           icon="history"
@@ -641,6 +645,11 @@ function TrustPanel() {
           icon="ledger"
           title="Accountable actions"
           body="Every action is recorded in an audit log: who did what, and when."
+        />
+        <TrustPillar
+          icon="shield"
+          title="Safe sign-in and backups"
+          body="Doctors and administrators sign in with multi-factor authentication (MFA). Your data is backed up daily."
         />
       </ul>
     </div>
