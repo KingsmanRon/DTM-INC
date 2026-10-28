@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../demo.module.css";
 
@@ -294,6 +295,10 @@ export function DemoExperience({ initialChapter = 0 }: { initialChapter?: number
                 <Icon name="arrow" />
                 Return to the top
               </button>
+              <Link href="/demo" className={styles.textButton}>
+                <Icon name="arrow" />
+                Try it yourself
+              </Link>
             </div>
           </div>
 
